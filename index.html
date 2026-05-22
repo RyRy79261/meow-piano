@@ -651,6 +651,51 @@ function playNote(nd, opts) {
   }
 }
 
+/* ── Melodic voice for self-play ──────────────────────────────────────
+   The three meow recordings differ wildly: meow_low sweeps from ~300Hz
+   up past 1200Hz, so pitch-shifting it destroys any tune. Only meow_mid
+   holds a steady pitch (~405Hz). Songs therefore use ONE sample, with
+   its pitch-bending attack skipped, so every note has a clear pitch and
+   the melody stays recognisable.                                       */
+const SONG_VOICE = 'mid';
+const SONG_REF   = 405;     // measured fundamental of meow_mid (Hz)
+const SONG_SKIP  = 0.05;    // seconds of attack glide to skip past
+
+function playSongNote(midi, opts) {
+  if (!audioReady) return;
+  if (ctx.state === 'suspended') ctx.resume();
+  const buf = buffers[SONG_VOICE];
+  if (!buf) return;
+
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = midiToFreq(midi) / SONG_REF;
+
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 9000;
+
+  const gain = ctx.createGain();
+  const t = ctx.currentTime;
+  const g   = (opts && opts.gain !== undefined) ? opts.gain : 0.9;
+  const dur = (opts && opts.dur)  ? opts.dur : 0.26;
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(g, t + 0.012);
+  gain.gain.setValueAtTime(g, t + dur);
+  gain.gain.linearRampToValueAtTime(0.0001, t + dur + 0.07);
+
+  let out = gain;
+  if (ctx.createStereoPanner) {
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.max(-0.5, Math.min(0.5, (midi - 64) / 60));
+    gain.connect(pan);
+    out = pan;
+  }
+  src.connect(lp); lp.connect(gain);
+  out.connect(master);
+  src.start(0, SONG_SKIP);
+  try { src.stop(t + dur + 0.12); } catch (e) {}
+}
+
 /* ════════════ Trigger (sound + animation) ════════════ */
 let lastFloat = 0;
 
@@ -658,7 +703,8 @@ function trigger(idx, opts) {
   const nd = NOTE_DEFS[idx];
   const el = keyEls[idx];
   if (!nd || !el) return;
-  playNote(nd, opts);
+  if (opts && opts.song) playSongNote(nd.midi, opts);
+  else playNote(nd, opts);
   el.classList.remove('down');
   void el.offsetWidth;            // restart CSS animation
   el.classList.add('down');
@@ -737,57 +783,59 @@ window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
    ════════════════════════════════════════════════════════════ */
 
 /* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
-   Perpetual-motion chromatic 16ths: cascading semitone runs that weave
-   down and back up the keyboard, then a buzzing climb to the high C. */
+   Perpetual-motion chromatic runs that cascade down and weave back up.
+   Kept inside ~1.4 octaves so the meow stays in a clear pitch range. */
 function genBumblebee() {
   const seq = [];
   const run = (a, b) => {            // inclusive chromatic run, either direction
     const s = a < b ? 1 : -1;
     for (let m = a; m !== b + s; m += s) seq.push(m);
   };
-  run(84, 72); run(72, 79); run(79, 72); run(72, 84);
-  run(84, 71); run(71, 78); run(78, 67); run(67, 79);
-  run(79, 68); run(68, 80); run(80, 69); run(69, 84);
-  run(84, 72); run(72, 84);
+  run(75, 63); run(63, 70); run(70, 63); run(63, 75);
+  run(75, 62); run(62, 69); run(69, 58); run(58, 70);
+  run(70, 59); run(59, 71); run(71, 60); run(60, 75);
+  run(75, 63); run(63, 75);
 
-  const dt = 0.092;                  // ~11 notes/sec — frantic but clean
+  const dt = 0.10;                   // ~10 notes/sec — frantic but trackable
   const out = [];
   let t = 0;
-  for (const m of seq) { out.push({ midi:m, t, dur:0.15 }); t += dt; }
-  out.push({ midi:84, t: t + 0.05, dur:0.7, gain:1.15 });   // the bee lands
+  for (const m of seq) { out.push({ midi:m, t, dur:0.11, gain:0.85 }); t += dt; }
+  out.push({ midi:75, t: t + 0.04, dur:0.6, gain:1.0 });    // the bee lands
   return out;
 }
 
 /* In the Hall of the Mountain King — Grieg, Peer Gynt (1875, public domain).
-   The creeping theme played three times — low, middle, high octave — with
-   a steady accelerando, the way the troll hall scene speeds up. */
+   Phrase A creeps up a fifth (1 2 ♭3 4 5 ♭3 5); phrase B answers with the
+   eerie rising semitone to ♭6 and walks back down to the tonic. The whole
+   theme repeats three times in one octave, speeding up and getting louder
+   — the troll-hall accelerando — staying in a clean pitch range. */
 function genMountainKing() {
-  // semitone offsets from C4; the theme as a letter-note sequence
-  const THEME = [0,2,4,0,4,3,3,2,2,0,2,4,0,4,-3,-5,4,0,4,7,
-                 0,2,4,0,4,3,3,2,2,0,2,4,0,4,7,4,2];
-  const BASE = 60;
-  const OCTAVES = [-12, 0, 12];
-  const total = THEME.length * OCTAVES.length;
+  // semitone degrees above the tonic
+  const PHRASE_A = [0, 2, 3, 5, 7, 3, 7];   // A  B  C  D  E  C  E
+  const PHRASE_B = [8, 7, 5, 3, 7, 3, 0];   // F  E  D  C  E  C  A
+  const THEME = PHRASE_A.concat(PHRASE_B);
+  const BASE = 62;                          // keeps every note near rate 1.0
+  const PASSES = 3;
+  const total = THEME.length * PASSES;
   const out = [];
   let t = 0, i = 0;
-  for (const oct of OCTAVES) {
-    for (const off of THEME) {
-      const step = 0.30 - (i / total) * 0.20;          // 0.30s → 0.10s
-      out.push({ midi: BASE + oct + off, t, dur: Math.max(0.16, step * 0.9) });
+  for (let p = 0; p < PASSES; p++) {
+    for (const deg of THEME) {
+      const frac = i / total;
+      const step = 0.34 - frac * 0.17;       // accelerando: 0.34s → 0.17s
+      const gain = 0.5 + frac * 0.5;         // crescendo
+      out.push({ midi: BASE + deg, t, dur: Math.min(0.42, step * 0.95), gain });
       t += step;
       i++;
     }
   }
-  // a final ringing low/mid/high tonic cluster
-  out.push({ midi: BASE - 12, t, dur:1.0 });
-  out.push({ midi: BASE,      t, dur:1.0 });
-  out.push({ midi: BASE + 12, t, dur:1.0, gain:1.1 });
+  out.push({ midi: BASE, t: t + 0.05, dur: 1.1, gain: 1.05 });   // land on the tonic
   return out;
 }
 
 const SONGS = {
-  bumblebee:    { title:'Flight of the Bumblebee', gain:0.62, gen:genBumblebee },
-  mountainking: { title:'In the Hall of the Mountain King', gain:0.6, gen:genMountainKing },
+  bumblebee:    { title:'Flight of the Bumblebee', gen:genBumblebee },
+  mountainking: { title:'In the Hall of the Mountain King', gen:genMountainKing },
 };
 
 /* ── Playback engine ── */
@@ -812,7 +860,6 @@ function stopSong() {
   if (playing) {
     playing = false;
     playingKey = null;
-    playbackGain = 1;
     updateSongUI();
   }
 }
@@ -826,14 +873,13 @@ function playSong(key) {
   const events = def.gen();
   playing = true;
   playingKey = key;
-  playbackGain = def.gain;
   updateSongUI();
 
   let end = 0;
   for (const ev of events) {
     end = Math.max(end, ev.t + (ev.dur || 0));
     songTimers.push(setTimeout(
-      () => triggerMidi(ev.midi, { dur: ev.dur, gain: ev.gain }),
+      () => triggerMidi(ev.midi, { song: true, dur: ev.dur, gain: ev.gain }),
       ev.t * 1000));
   }
   songTimers.push(setTimeout(stopSong, end * 1000 + 900));
