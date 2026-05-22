@@ -546,25 +546,36 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
   layout();
 });
 
-/* ════════════ Audio — the cat sampler ═══════════════════════════════
-   A proper sampler built from one steady meow recording (meow_mid).
-   At load time the raw recording is processed into an instrument:
+/* ════════════ Audio — natural meow instrument ═══════════════════════
+   Each note plays a WHOLE meow recording (onset + body + decay) so it
+   always sounds like a real cat, never a sustained drone.
 
-     • root pitch is measured (≈407 Hz) so notes can be tuned exactly;
-     • the pitch-bending onset is skipped so every note starts in tune;
-     • a steady mid-section is turned into a click-free CROSSFADE LOOP
-       so a note can sustain for any length.
+   • Free-play taps keep the three-voice variety (low / mid / high cat).
+   • Self-playing songs route through the steady mid recording so every
+     melody note is in tune relative to the next.
 
-   Each note is then one looping source + an ADSR gain envelope: pitch
-   comes from playbackRate, but DURATION comes from the envelope — so a
-   low note and a high note of the same length sound the same length
-   (the old approach stretched low notes into growls and clipped high
-   ones). This is the standard attack / looped-sustain / release design
-   every hardware sampler uses.                                         */
+   This is multisample-ready: as more cat recordings are added (see
+   EXTRA_SAMPLES below), the engine picks the closest-pitched sample
+   for each note and only pitch-shifts by a small amount — the proper
+   multisampling design.
+*/
 let ctx = null, master = null;
 let audioReady = false;
-let catInst = null;            // processed instrument: { buffer, root, ... }
-const buffers = {};            // raw decoded recordings
+const buffers = {};            // raw decoded recordings per voice
+let melodicSamples = [];       // tonal samples used for self-played songs
+
+/* ── To add more cat sounds for the melodies ──────────────────────────
+   1. Drop a recording in /sounds/ (WAV or OGG).
+   2. Add an entry below: { file: 'sounds/<name>.wav', root: <Hz> }.
+      `root` is the recording's main pitch. (440Hz = A4, 523Hz = C5,
+      etc. Trial-and-error works — adjust until the note sounds in tune
+      when the song plays.)
+   The engine automatically picks the closest-pitched sample per note,
+   so the more recordings you add, the more meow-like the melodies stay
+   (less pitch-shifting per note).                                       */
+const EXTRA_SAMPLES = [
+  // { file: 'sounds/cat_a4.wav', root: 440 },
+];
 
 function b64ToArrayBuffer(b64) {
   const bin = atob(b64);
@@ -597,110 +608,87 @@ async function initAudio() {
     }
   }));
 
-  try {
-    catInst = buildCatInstrument(buffers.mid);
-  } catch (err) {
-    console.warn('cat instrument build failed — using synth', err);
-    catInst = buildCatInstrument(synthMeow(407));
-  }
+  // Seed the melodic-sample set with the one tonally-steady recording.
+  // (meow_low sweeps wildly, meow_high's fundamental is ambiguous, so
+  // they aren't safe for melody — they stay as tap-only voices.)
+  melodicSamples = [{ buf: buffers.mid, root: 407 }];
+
+  // Then load any user-added recordings as extra melodic samples.
+  await Promise.all(EXTRA_SAMPLES.map(async (e) => {
+    try {
+      const res = await fetch(e.file);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const ab = await res.arrayBuffer();
+      const buf = await ctx.decodeAudioData(ab);
+      melodicSamples.push({ buf, root: e.root });
+    } catch (err) {
+      console.warn('extra sample failed:', e.file, err);
+    }
+  }));
+
   audioReady = true;
 }
 
-/* Procedural meow — only used if the recording fails to decode */
+/* Procedural meow — only used if a recording fails to decode */
 function synthMeow(baseHz) {
-  const sr = ctx.sampleRate, dur = 1.0, len = (sr * dur) | 0;
+  const sr = ctx.sampleRate, dur = 0.7, len = (sr * dur) | 0;
   const buf = ctx.createBuffer(1, len, sr);
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) {
     const t = i / sr;
-    const env = Math.min(t * 18, 1) * (0.6 + 0.4 * Math.exp(-t * 1.2));
-    const f0 = baseHz * (0.55 + 0.45 * Math.min(t * 9, 1) + 0.02 * Math.sin(t * 30));
+    const env = Math.exp(-t * 3.0) * Math.min(t * 28, 1);
+    const f0 = baseHz * (1.15 - 0.35 * t + 0.12 * Math.sin(t * 11));
     const ph = 2 * Math.PI * f0 * t;
     d[i] = env * 0.4 * (
-      0.55 * Math.sin(ph) +
-      0.30 * Math.sin(ph * 2.01) +
-      0.12 * Math.sin(ph * 3.02) +
-      0.06 * Math.sin(ph * 5.03)
+      0.55 * Math.sin(ph) + 0.30 * Math.sin(ph * 2.01) +
+      0.12 * Math.sin(ph * 3.02) + 0.06 * Math.sin(ph * 5.03)
     );
   }
   return buf;
 }
 
-/* Turn a raw meow recording into a tuned, loopable instrument.
-   meow_mid measures: fundamental ≈407Hz, onset glide settles by ~0.13s,
-   steady body from ~0.46s. We keep [0..loopFrom) natural, then build a
-   crossfade loop: blending the loop's head with the audio one loop-
-   length later makes the loopEnd→loopStart wrap seamless.               */
-function buildCatInstrument(rawBuf) {
-  const sr  = rawBuf.sampleRate;
-  const src = rawBuf.getChannelData(0);
-  const ROOT = 407;                              // measured Hz
-  const period = sr / ROOT;
-  const startOffset = 0.13;                      // skip the onset pitch glide
-  let loopFrom = Math.round(0.46 * sr);          // steady body begins here
-  const xf = Math.round(0.018 * sr);             // crossfade length
-  let P = Math.round(110 * period);              // loop length ≈ 110 periods
-
-  // keep everything inside the available audio
-  if (loopFrom + P + xf > src.length) {
-    P = src.length - loopFrom - xf - 1;
+/* Pick the recording whose natural pitch sits closest to a target freq. */
+function pickSample(freq) {
+  let best = null, bd = Infinity;
+  for (const s of melodicSamples) {
+    if (!s.buf) continue;
+    const d = Math.abs(Math.log(freq / s.root));
+    if (d < bd) { bd = d; best = s; }
   }
-  if (P < period * 8) {                          // recording too short — no loop
-    const ab0 = ctx.createBuffer(1, src.length, sr);
-    ab0.getChannelData(0).set(src);
-    return { buffer: ab0, root: ROOT, startOffset: 0.0,
-             loopStart: 0, loopEnd: src.length / sr, looped: false };
-  }
-
-  const outLen = loopFrom + P;
-  const ab = ctx.createBuffer(1, outLen, sr);
-  const out = ab.getChannelData(0);
-  for (let i = 0; i < loopFrom; i++) out[i] = src[i];
-  for (let i = 0; i < P; i++) {
-    let s = src[loopFrom + i];
-    if (i < xf) {                                // crossfade head with material 1 loop later
-      const w = i / xf;
-      s = src[loopFrom + P + i] * (1 - w) + s * w;
-    }
-    out[loopFrom + i] = s;
-  }
-  return {
-    buffer: ab, root: ROOT, startOffset: startOffset, looped: true,
-    loopStart: loopFrom / sr, loopEnd: outLen / sr,
-  };
+  return best;
 }
 
-/* Play one tuned cat note.
-   opts: { dur, gain, release, pan } — dur is the sustain time in seconds. */
-function playCatNote(freq, opts) {
-  if (!audioReady || !catInst) return;
+/* Play one natural cat meow. opts:
+     buf      AudioBuffer to play (required)
+     rate     playback rate (1 = native pitch)
+     dur      optional sustain time; omitted = plays its natural length
+     gain     peak gain (default 0.9)
+     release  fade time after dur (default 0.22)
+     pan      stereo pan -1..1                                            */
+function playMeow(opts) {
+  if (!audioReady || !opts || !opts.buf) return;
   if (ctx.state === 'suspended') ctx.resume();
-  opts = opts || {};
-  const peak = opts.gain !== undefined ? opts.gain : 0.9;
-  const rel  = opts.release || 0.12;
-  const hold = Math.max(0.05, opts.dur || 0.34);
 
   const src = ctx.createBufferSource();
-  src.buffer = catInst.buffer;
-  if (catInst.looped) {
-    src.loop = true;
-    src.loopStart = catInst.loopStart;
-    src.loopEnd   = catInst.loopEnd;
-  }
-  // pitch from playback rate, with a tiny humanising detune
-  src.playbackRate.value = (freq / catInst.root) * (1 + (Math.random() * 2 - 1) * 0.004);
+  src.buffer = opts.buf;
+  src.playbackRate.value = (opts.rate || 1) * (1 + (Math.random() * 2 - 1) * 0.01);
 
-  // tame the fizz when a note is pitched well above the recording
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = Math.max(2600, Math.min(9000, freq * 7));
+  // gentle EQ — keep the meow's natural body
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 110;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';  lp.frequency.value = 9000;
 
+  const peak = opts.gain !== undefined ? opts.gain : 0.9;
   const g = ctx.createGain();
   const t = ctx.currentTime;
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(peak, t + 0.014);          // attack
-  g.gain.setValueAtTime(peak, t + hold);                    // sustain
-  g.gain.linearRampToValueAtTime(0.0001, t + hold + rel);   // release
+  g.gain.linearRampToValueAtTime(peak, t + 0.006);    // anti-click only — preserve the natural attack
+
+  if (opts.dur) {
+    const rel = opts.release || 0.22;
+    g.gain.setValueAtTime(peak, t + opts.dur);
+    g.gain.linearRampToValueAtTime(0.0001, t + opts.dur + rel);
+    try { src.stop(t + opts.dur + rel + 0.04); } catch (e) {}
+  }
 
   let out = g;
   if (ctx.createStereoPanner) {
@@ -709,10 +697,9 @@ function playCatNote(freq, opts) {
     g.connect(pan);
     out = pan;
   }
-  src.connect(lp); lp.connect(g);
+  src.connect(hp); hp.connect(lp); lp.connect(g);
   out.connect(master);
-  src.start(0, catInst.startOffset);
-  try { src.stop(t + hold + rel + 0.05); } catch (e) {}
+  src.start(0);
 }
 
 /* ════════════ Trigger (sound + animation) ════════════ */
@@ -722,12 +709,21 @@ function trigger(idx, opts) {
   const nd = NOTE_DEFS[idx];
   const el = keyEls[idx];
   if (!nd || !el) return;
-  playCatNote(nd.f, {
-    dur:     opts && opts.dur,
-    gain:    opts && opts.gain,
-    release: opts && opts.release,
-    pan:     nd.pan,
-  });
+  opts = opts || {};
+  if (opts.song) {
+    // self-played songs: pick the closest-pitched tonal recording
+    const s = pickSample(nd.f);
+    if (s) playMeow({
+      buf: s.buf, rate: nd.f / s.root,
+      dur: opts.dur, gain: opts.gain, release: opts.release, pan: nd.pan,
+    });
+  } else {
+    // free-play taps: keep the three-cat variety
+    playMeow({
+      buf: buffers[nd.voice], rate: nd.rate,
+      dur: opts.dur, gain: opts.gain, release: opts.release, pan: nd.pan,
+    });
+  }
   el.classList.remove('down');
   void el.offsetWidth;            // restart CSS animation
   el.classList.add('down');
@@ -818,11 +814,12 @@ function genBumblebee() {
   run(75, 62); run(62, 69); run(69, 58); run(58, 72);
   run(72, 60); run(60, 75);
 
-  const dt = 0.13;                   // brisk perpetual motion
+  const dt = 0.14;                   // brisk perpetual motion
   const out = [];
   let t = 0;
-  for (const m of seq) { out.push({ midi:m, t, dur:0.17, gain:0.8 }); t += dt; }
-  out.push({ midi:75, t: t + 0.05, dur:0.55, gain:1.0, release:0.35 });   // the bee lands
+  // each note rings long enough for the full meow onset + body to sound
+  for (const m of seq) { out.push({ midi:m, t, dur:0.26, gain:0.78, release:0.18 }); t += dt; }
+  out.push({ midi:75, t: t + 0.05, dur:0.6, gain:1.0, release:0.45 });    // the bee lands
   return out;
 }
 
@@ -844,14 +841,15 @@ function genMountainKing() {
   for (let p = 0; p < PASSES; p++) {
     for (const deg of THEME) {
       const frac = i / total;
-      const step = 0.40 - frac * 0.16;       // accelerando: 0.40s → 0.24s
+      const step = 0.44 - frac * 0.18;       // accelerando: 0.44s → 0.26s
       const gain = 0.55 + frac * 0.45;       // crescendo
-      out.push({ midi: BASE + deg, t, dur: step * 0.86, gain });
+      // generous dur so the meow's onset and body have time to sound
+      out.push({ midi: BASE + deg, t, dur: Math.max(0.34, step * 1.05), gain, release: 0.28 });
       t += step;
       i++;
     }
   }
-  out.push({ midi: BASE, t: t + 0.05, dur: 0.9, gain: 1.05, release: 0.5 });   // land on the tonic
+  out.push({ midi: BASE, t: t + 0.05, dur: 0.9, gain: 1.05, release: 0.6 });   // land on the tonic
   return out;
 }
 
@@ -901,7 +899,7 @@ function playSong(key) {
   for (const ev of events) {
     end = Math.max(end, ev.t + (ev.dur || 0));
     songTimers.push(setTimeout(
-      () => triggerMidi(ev.midi, { dur: ev.dur, gain: ev.gain, release: ev.release }),
+      () => triggerMidi(ev.midi, { song: true, dur: ev.dur, gain: ev.gain, release: ev.release }),
       ev.t * 1000));
   }
   songTimers.push(setTimeout(stopSong, end * 1000 + 900));
