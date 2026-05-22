@@ -2,580 +2,629 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0e0a16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>MEOWSIC — The Cat Piano</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Caveat:wght@700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Caveat:wght@700&display=swap');
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-  :root {
-    --bg: #110b1a;
-    --shelf: #1e1428;
-  }
+  :root { --bg: #0e0a16; }
 
   html, body {
-    height: 100%; overflow: hidden;
-    font-family: 'Fredoka', sans-serif;
-    background: var(--bg);
-    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E🐾%3C/text%3E%3C/svg%3E") 8 8, auto;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse 120% 80% at 50% 0%, #1c1330 0%, var(--bg) 70%);
+    font-family: 'Fredoka', system-ui, sans-serif;
+    color: #ffd9f0;
+    overscroll-behavior: none;
+    touch-action: manipulation;
   }
 
   /* ── Starfield ── */
   .stars { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
   .star {
     position: absolute; width: 2px; height: 2px;
-    background: white; border-radius: 50%;
+    background: #fff; border-radius: 50%;
     animation: twinkle var(--dur) ease-in-out infinite alternate;
   }
-  @keyframes twinkle {
-    0% { opacity: 0.08; } 100% { opacity: var(--o); }
-  }
+  @keyframes twinkle { 0% { opacity: .06; } 100% { opacity: var(--o); } }
 
-  /* ── Layout ── */
-  .wrap {
-    position: relative; z-index: 1;
-    height: 100%; display: flex;
-    flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 20px;
+  /* ── Top bar ── */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 8px 14px;
+    pointer-events: none;
   }
+  .logo {
+    font-family: 'Caveat', cursive; font-size: clamp(1.4rem, 4.5vw, 2.3rem);
+    color: #ffccee; text-shadow: 0 0 22px rgba(255,140,210,.5);
+    line-height: 1;
+  }
+  .hint {
+    font-size: clamp(.52rem, 1.5vw, .7rem);
+    letter-spacing: .14em; text-transform: uppercase;
+    color: rgba(255,200,240,.32);
+  }
+  @media (max-height: 430px) { .hint { display: none; } }
 
-  h1 {
-    font-family: 'Caveat', cursive;
-    font-size: clamp(2rem, 6vw, 4rem);
-    color: #ffccee;
-    text-shadow: 0 0 30px rgba(255,140,210,0.45);
-    animation: bob 3.5s ease-in-out infinite;
-    margin-bottom: 4px;
-  }
-  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-
-  .sub {
-    font-size: clamp(0.65rem, 1.6vw, 0.85rem);
-    color: rgba(255,200,240,0.35);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    margin-bottom: clamp(16px, 3vh, 36px);
-  }
-
-  /* ── Loading overlay ── */
-  #loader {
-    position: fixed; inset: 0; z-index: 999;
-    background: var(--bg);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    color: #ffccee; font-size: 1.2rem; gap: 16px;
-    transition: opacity 0.5s;
-  }
-  #loader.hide { opacity: 0; pointer-events: none; }
-  .loader-cat { font-size: 3rem; animation: bob 1s ease-in-out infinite; }
-  .loader-bar {
-    width: 180px; height: 6px; border-radius: 3px;
-    background: rgba(255,255,255,0.08); overflow: hidden;
-  }
-  .loader-fill {
-    height: 100%; width: 0%; border-radius: 3px;
-    background: linear-gradient(90deg, #f4a7bb, #c4a7e8);
-    transition: width 0.3s;
-  }
-
-  /* ── 3D Stage ── */
+  /* ── Stage ── */
   .stage {
-    perspective: 1100px;
-    perspective-origin: 50% 55%;
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
   }
+  .piano-wrap { transition: transform .45s cubic-bezier(.6,-0.2,.3,1.3); }
+  .stage.rotated .piano-wrap { transform: rotate(90deg); }
 
   .piano-body {
-    display: flex;
-    transform: rotateX(22deg) rotateY(-1deg);
-    transform-style: preserve-3d;
-    background: linear-gradient(180deg, #2a1a38 0%, #1a0f24 100%);
-    border-radius: 16px;
-    padding: 20px 24px 24px;
-    border: 1px solid rgba(255,180,255,0.07);
+    position: relative;
+    width: 400px; height: 260px;
+    background: linear-gradient(180deg, #241636 0%, #150d24 100%);
+    border-radius: 20px;
+    padding: 0;
+    border: 2px solid rgba(255,180,255,.08);
     box-shadow:
-      0 50px 100px rgba(0,0,0,0.7),
-      0 0 100px rgba(140,60,180,0.06),
-      inset 0 1px 0 rgba(255,255,255,0.04);
-    gap: 5px;
+      0 40px 80px rgba(0,0,0,.7),
+      0 0 90px rgba(150,70,200,.12),
+      inset 0 2px 0 rgba(255,255,255,.05);
   }
 
-  /* ── Cat Key ── */
-  .cat-key {
+  .whites { display: flex; height: 100%; width: 100%; }
+  .blacks { position: absolute; top: 0; left: 0; right: 0; height: 62%; pointer-events: none; }
+
+  /* ── Keys ── */
+  .key {
     position: relative;
-    width: clamp(44px, 9vw, 82px);
-    display: flex; flex-direction: column; align-items: center;
     cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    transform-style: preserve-3d;
-    transition: transform 0.08s ease;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
   }
-  .cat-key:active, .cat-key.pressed {
-    transform: translateZ(-5px) translateY(3px);
-  }
-
-  /* The cat is lying down — wider than tall, like a loaf filling the key */
-  .cat-loaf {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 0.72 / 1;
-    border-radius: 14px 14px 10px 10px;
-    transition: filter 0.12s, box-shadow 0.12s;
-    overflow: visible;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
+  .key.white { width: var(--ww); height: 100%; }
+  .key.black {
+    position: absolute; top: 0;
+    width: var(--bw); height: 100%;
+    pointer-events: auto;
+    z-index: 5;
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,.65));
   }
 
-  .cat-key:hover .cat-loaf {
-    filter: brightness(1.12);
-    box-shadow: 0 0 20px var(--glow);
+  .key .cat {
+    width: 100%; height: 100%; display: block;
+    transform-origin: 50% 62%;
+    transition: transform .07s ease, filter .12s ease;
+    will-change: transform;
   }
-  .cat-key.pressed .cat-loaf {
-    filter: brightness(1.3);
-    box-shadow: 0 0 35px var(--glow), 0 0 70px var(--glow);
+  .key:hover .cat { filter: brightness(1.08); }
+  .key.down .cat { transform: scale(.93) translateY(2.5%); }
+  .key.down { filter: drop-shadow(0 0 18px var(--glow)); }
+  .key.black.down { filter: drop-shadow(0 0 18px var(--glow)) drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
+
+  .cat .ears { transform-origin: 50% 70%; transition: transform .09s ease; }
+  .key.down .cat .ears { transform: translateY(-4px) scale(1.04); }
+  .cat .tail-l { transition: transform .25s ease; transform-origin: 80% 90%; }
+  .key:hover .cat .tail-l { transform: rotate(-7deg); }
+  .key.down .cat .tail-l { transform: rotate(-16deg); }
+
+  .cat .eyes-shut, .cat .mouth-sing { opacity: 0; }
+  .key.down .cat .eyes-open, .key.down .cat .mouth-idle { opacity: 0; }
+  .key.down .cat .eyes-shut, .key.down .cat .mouth-sing { opacity: 1; }
+
+  /* ── Key label ── */
+  .label {
+    position: absolute; bottom: 4px; left: 0; right: 0;
+    text-align: center; pointer-events: none;
+    font-size: clamp(.5rem, 1.5vw, .72rem);
+    font-weight: 600;
+    color: rgba(40,20,45,.55);
+    letter-spacing: .03em;
+  }
+  .key.black .label { color: rgba(255,225,250,.4); bottom: 6px; }
+
+  /* ── Meow bubble ── */
+  .bubble {
+    position: absolute; left: 50%; top: -6px;
+    transform: translate(-50%, 0) scale(.5);
+    font-family: 'Caveat', cursive; font-size: 1.5rem; font-weight: 700;
+    white-space: nowrap; pointer-events: none;
+    color: var(--glow); text-shadow: 0 0 12px var(--glow);
+    opacity: 0; z-index: 20;
+  }
+  .key.down .bubble { animation: pop .6s ease-out; }
+  @keyframes pop {
+    0%   { opacity: 0; transform: translate(-50%, 4px) scale(.4); }
+    30%  { opacity: 1; transform: translate(-50%, -22px) scale(1.15); }
+    100% { opacity: 0; transform: translate(-50%, -54px) scale(.7); }
   }
 
-  /* Inner body shape — the actual cat lying inside the key */
-  .body-fill {
-    position: absolute; inset: 0;
-    border-radius: inherit;
-    background: var(--fur);
-    /* Subtle fur texture with gradient */
-    background-image:
-      radial-gradient(ellipse 80% 50% at 50% 70%, var(--belly) 0%, transparent 70%);
-  }
-
-  /* Ears — triangles poking out above the key */
-  .ear {
-    position: absolute;
-    top: -9px;
-    width: 22%; height: 16px;
-    background: var(--fur);
-    clip-path: polygon(50% 0%, 5% 100%, 95% 100%);
-    z-index: 2;
-  }
-  .ear::after {
-    content: '';
-    position: absolute;
-    top: 35%; left: 50%; transform: translateX(-50%);
-    width: 50%; height: 55%;
-    background: var(--inner);
-    clip-path: polygon(50% 0%, 5% 100%, 95% 100%);
-  }
-  .ear.l { left: 12%; transform: rotate(-8deg); }
-  .ear.r { right: 12%; transform: rotate(8deg); }
-
-  /* Face — positioned in upper portion of the loaf */
-  .face {
-    position: absolute;
-    top: 22%;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    pointer-events: none;
-    width: 70%;
-  }
-
-  .eyes { display: flex; gap: 30%; justify-content: center; width: 100%; }
-  .eye {
-    width: 8px; height: 8px;
-    background: #1a0e24;
-    border-radius: 50%;
-    position: relative;
-    transition: all 0.1s;
-  }
-  .eye::after {
-    content: ''; position: absolute;
-    width: 3px; height: 3px;
-    background: rgba(255,255,255,0.85);
-    border-radius: 50%;
-    top: 1px; right: 1px;
-  }
-  /* Squint when pressed */
-  .cat-key.pressed .eye {
-    height: 3px;
-    border-radius: 6px;
-  }
-  .cat-key.pressed .eye::after { display: none; }
-
-  .nose {
-    width: 5px; height: 3.5px;
-    background: var(--nose-c, rgba(0,0,0,0.3));
-    border-radius: 50%;
-  }
-  .whiskers {
-    position: relative;
-    width: 100%; height: 4px;
-  }
-  .whisker {
-    position: absolute;
-    height: 1px;
-    width: 38%;
-    background: rgba(0,0,0,0.12);
-    top: 50%;
-  }
-  .whisker.wl1 { left: 0; transform: rotate(-6deg); }
-  .whisker.wl2 { left: 2px; transform: rotate(4deg); top: 80%; }
-  .whisker.wr1 { right: 0; transform: rotate(6deg); }
-  .whisker.wr2 { right: 2px; transform: rotate(-4deg); top: 80%; }
-
-  .mouth {
-    display: flex; gap: 0px; margin-top: -1px;
-  }
-  .mouth-h {
-    width: 5px; height: 4px;
-    border: 1.2px solid rgba(0,0,0,0.2);
-    border-top: none;
-    border-radius: 0 0 50% 50%;
-  }
-
-  /* Paws — little bumps at the bottom of the loaf */
-  .paws {
-    position: absolute;
-    bottom: 6px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 4px;
-  }
-  .paw {
-    width: 10px; height: 6px;
-    background: var(--paw-c, var(--fur));
-    border-radius: 50% 50% 40% 40%;
-    filter: brightness(0.92);
-  }
-
-  /* Tail — peeks out to the side */
-  .tail {
-    position: absolute;
-    bottom: 10px;
-    right: -10px;
-    width: 22px; height: 35px;
-    border-right: 3px solid var(--fur);
-    border-top: 3px solid var(--fur);
-    border-radius: 0 80% 0 0;
-    opacity: 0.55;
-    transition: transform 0.3s ease;
-    transform-origin: bottom left;
-    filter: brightness(0.95);
-  }
-  .cat-key:hover .tail { transform: rotate(-8deg); }
-  .cat-key.pressed .tail { transform: rotate(-20deg); }
-
-  /* Stripes for tabby cats */
-  .stripes {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 60%; height: 40%;
-    display: flex; flex-direction: column;
-    gap: 3px; opacity: 0.12;
-    pointer-events: none;
-  }
-  .stripe {
-    height: 2px;
-    background: #000;
-    border-radius: 1px;
-    width: 80%;
-    margin: 0 auto;
-  }
-
-  /* Meow speech bubble */
-  .meow-pop {
-    position: absolute;
-    top: -28px; left: 50%;
-    transform: translateX(-50%);
-    font-family: 'Caveat', cursive;
-    font-size: 0.95rem;
-    color: var(--glow);
-    text-shadow: 0 0 8px var(--glow);
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .cat-key.pressed .meow-pop {
-    animation: popUp 0.55s ease-out forwards;
-  }
-  @keyframes popUp {
-    0% { opacity:0; transform: translateX(-50%) translateY(8px) scale(0.6); }
-    25% { opacity:1; transform: translateX(-50%) translateY(-8px) scale(1.1); }
-    100% { opacity:0; transform: translateX(-50%) translateY(-30px) scale(0.7); }
-  }
-
-  /* Note label */
-  .key-label {
-    margin-top: 8px;
-    font-size: 0.6rem;
-    color: rgba(255,200,240,0.28);
-    letter-spacing: 0.1em;
-  }
-
-  /* Floating music emojis */
+  /* ── Floating notes ── */
   .float-note {
-    position: fixed; pointer-events: none; z-index: 50;
-    font-size: 1.4rem;
-    animation: floatAway 1.2s ease-out forwards;
+    position: fixed; pointer-events: none; z-index: 40;
+    font-size: 1.5rem;
+    animation: floatAway 1.1s ease-out forwards;
   }
   @keyframes floatAway {
-    0% { opacity: 1; transform: translate(0,0) scale(1) rotate(0deg); }
-    100% { opacity: 0; transform: translate(var(--dx), -100px) scale(0.3) rotate(var(--rot)); }
+    0%   { opacity: 1; transform: translate(-50%,-50%) scale(1) rotate(0); }
+    100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), -130px) scale(.3) rotate(var(--rot)); }
   }
 
-  /* Footer */
-  .footer {
-    position: fixed; bottom: 16px;
-    color: rgba(255,200,240,0.22);
-    font-size: 0.65rem; letter-spacing: 0.14em;
-    z-index: 2;
+  /* ── Rotate button ── */
+  .rotate-btn {
+    position: fixed; z-index: 35;
+    right: 16px; bottom: 16px;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: 1px solid rgba(255,180,255,.18);
+    background: rgba(40,24,58,.85);
+    color: #ffccee; font-size: 1.5rem;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; backdrop-filter: blur(6px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    transition: transform .2s ease, background .2s;
   }
-  .footer kbd {
-    display: inline-block; padding: 1px 5px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 3px; font-family: inherit; font-size: 0.6rem;
-  }
+  .rotate-btn:active { transform: scale(.88); background: rgba(60,36,84,.95); }
+  .rotate-btn span { transition: transform .45s cubic-bezier(.6,-0.2,.3,1.3); }
+  .stage.rotated ~ .rotate-btn span { transform: rotate(90deg); }
 
-  @media (max-width: 580px) {
-    .piano-body { gap: 3px; padding: 14px 10px 16px; }
-    .cat-key { width: 40px; }
-    .ear { height: 11px; top: -7px; }
-    .eye { width: 6px; height: 6px; }
-    .tail { display: none; }
+  /* ── Start overlay ── */
+  #start {
+    position: fixed; inset: 0; z-index: 100;
+    background: radial-gradient(ellipse at 50% 40%, #1c1330, var(--bg));
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px;
+    transition: opacity .5s ease;
   }
+  #start.hide { opacity: 0; pointer-events: none; }
+  #start .big-cat { font-size: 4.5rem; animation: bob 1.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  #start .title { font-family:'Caveat',cursive; font-size: 3rem; color:#ffccee;
+    text-shadow: 0 0 30px rgba(255,140,210,.5); }
+  #start .go {
+    margin-top: 6px; padding: 13px 30px; border-radius: 30px;
+    background: linear-gradient(90deg,#f4a7bb,#c4a7e8);
+    color:#2a1233; font-weight: 700; font-size: 1.05rem;
+    box-shadow: 0 10px 30px rgba(200,120,220,.4);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+  #start .note { font-size:.72rem; color: rgba(255,200,240,.4); letter-spacing:.1em; }
 </style>
 </head>
 <body>
 
 <div class="stars" id="stars"></div>
 
-<div id="loader">
-  <div class="loader-cat">🐱</div>
-  <div>loading meows…</div>
-  <div class="loader-bar"><div class="loader-fill" id="loaderFill"></div></div>
+<div class="topbar">
+  <span class="logo">🐱 Meowsic</span>
+  <span class="hint">tap a kitty &middot; play a tune</span>
 </div>
 
-<div class="wrap">
-  <h1>🐱 Meowsic 🐱</h1>
-  <p class="sub">tap a kitty · hear it sing</p>
-
-  <div class="stage">
-    <div class="piano-body" id="piano"></div>
+<div class="stage" id="stage">
+  <div class="piano-wrap">
+    <div class="piano-body" id="piano">
+      <div class="whites" id="whites"></div>
+      <div class="blacks" id="blacks"></div>
+    </div>
   </div>
 </div>
 
-<div class="footer">
-  click / tap · or press <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd>
+<button class="rotate-btn" id="rotateBtn" title="Rotate piano" aria-label="Rotate piano"><span>🔄</span></button>
+
+<div id="start">
+  <div class="big-cat">🐾</div>
+  <div class="title">Meowsic</div>
+  <div class="go">tap to wake the kittens</div>
+  <div class="note">a piano made of cats</div>
 </div>
 
+<script src="meows.js"></script>
 <script>
-// ═══════════════════════════════════════════
-//  Cat definitions
-// ═══════════════════════════════════════════
-const CATS = [
-  { name:'Mochi',   fur:'#f4a7bb', belly:'#f8c4d4', inner:'#e76f8b', glow:'rgba(244,167,187,0.55)', rate:0.55, meow:'mew~',  tabby:false },
-  { name:'Pudding', fur:'#f0c26a', belly:'#f5d99a', inner:'#d49a2a', glow:'rgba(240,194,106,0.55)', rate:0.65, meow:'mrow!', tabby:true  },
-  { name:'Lilac',   fur:'#bfa0e0', belly:'#d4c0ee', inner:'#9060c8', glow:'rgba(191,160,224,0.55)', rate:0.75, meow:'nyaa~', tabby:false },
-  { name:'Minty',   fur:'#7cc8a4', belly:'#a0dcc0', inner:'#3da87a', glow:'rgba(124,200,164,0.55)', rate:0.85, meow:'prr!',  tabby:true  },
-  { name:'Cloud',   fur:'#c8cede', belly:'#dce0ea', inner:'#9098b4', glow:'rgba(200,206,222,0.55)', rate:1.0,  meow:'meow!', tabby:false },
-  { name:'Peach',   fur:'#f0a878', belly:'#f5c4a0', inner:'#d47840', glow:'rgba(240,168,120,0.55)', rate:1.15, meow:'mya!',  tabby:true  },
-  { name:'Berry',   fur:'#cf7ab8', belly:'#dfa0d0', inner:'#a84898', glow:'rgba(207,122,184,0.55)', rate:1.35, meow:'miao~', tabby:false },
-  { name:'Sky',     fur:'#78b0d0', belly:'#a0cce0', inner:'#4088b0', glow:'rgba(120,176,208,0.55)', rate:1.55, meow:'mii!',  tabby:false },
+"use strict";
+/* ════════════════════════════════════════════════════════════
+   MEOWSIC — a cat piano.
+   White keys: tabbies (low) grading up to cream / Siamese / white.
+   Black keys: black cats, stacked on top between the white keys.
+   Audio: 3 real meow voices (low/mid/high) pitch-mapped per note.
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Cats ── */
+const WHITE_CATS = [
+  { name:'Biscuit',     fur:'#9a754f', furDark:'#634930', belly:'#d8b487', ear:'#df9290', eye:'#241c12', nose:'#caa07e', stripes:true,  whisker:'rgba(255,255,255,.82)' },
+  { name:'Smokey',      fur:'#9094a0', furDark:'#5d606b', belly:'#c9cbd4', ear:'#dd9a98', eye:'#272430', nose:'#9b9097', stripes:true,  whisker:'rgba(255,255,255,.85)' },
+  { name:'Marmalade',   fur:'#e89a55', furDark:'#b1672a', belly:'#f6d2a4', ear:'#ec9d97', eye:'#3a2812', nose:'#d98a6a', stripes:true,  whisker:'rgba(255,255,255,.85)' },
+  { name:'Sterling',    fur:'#c2c5cd', furDark:'#8a8d96', belly:'#e8e9ee', ear:'#ecaaa6', eye:'#2a2630', nose:'#b8a8aa', stripes:true,  whisker:'rgba(86,78,92,.6)'   },
+  { name:'Custard',     fur:'#ecd5a4', furDark:'#c6a972', belly:'#f8ecd0', ear:'#eeb1aa', eye:'#3a2c14', nose:'#d4ad84', stripes:true,  whisker:'rgba(120,100,80,.55)' },
+  { name:'Cloud',       fur:'#f1e4cb', furDark:'#cebd96', belly:'#faf1de', ear:'#f0bdb4', eye:'#2f2618', nose:'#dcb79a', stripes:false, whisker:'rgba(120,105,85,.5)' },
+  { name:'Sashimi',     fur:'#efe2c9', furDark:'#c7b48d', belly:'#f8efdb', ear:'#7c5e48', eye:'#3f86d6', nose:'#9c7b63', stripes:false, points:'#6e5140', whisker:'rgba(110,95,80,.5)' },
+  { name:'Marshmallow', fur:'#f6f3ee', furDark:'#d3cdc3', belly:'#fdfcf9', ear:'#f2c2bd', eye:'#2c2620', nose:'#e2b6ad', stripes:false, whisker:'rgba(120,110,100,.5)' },
+];
+const BLACK_CATS = [
+  { name:'Shadow',   eye:'#8fe06a' },
+  { name:'Pepper',   eye:'#f3c64e' },
+  { name:'Midnight', eye:'#6cd9d2' },
+  { name:'Binx',     eye:'#f3a64e' },
+  { name:'Salem',    eye:'#9b8cf0' },
+].map(o => ({
+  name:o.name, fur:'#2a2734', furDark:'#141220', belly:'#3b3649',
+  ear:'#7a5f70', eye:o.eye, nose:'#5a4a58', stripes:false,
+  rim:'rgba(190,178,224,.4)', whisker:'rgba(255,255,255,.85)', isBlack:true,
+}));
+
+/* ── Notes (one octave + high C) ── */
+const NOTE_DEFS = [
+  { n:'C',  f:261.63, w:0 },
+  { n:'C♯', f:277.18, b:0, before:1 },
+  { n:'D',  f:293.66, w:1 },
+  { n:'D♯', f:311.13, b:1, before:2 },
+  { n:'E',  f:329.63, w:2 },
+  { n:'F',  f:349.23, w:3 },
+  { n:'F♯', f:369.99, b:2, before:3 },
+  { n:'G',  f:392.00, w:4 },
+  { n:'G♯', f:415.30, b:3, before:4 },
+  { n:'A',  f:440.00, w:5 },
+  { n:'A♯', f:466.16, b:4, before:5 },
+  { n:'B',  f:493.88, w:6 },
+  { n:'C',  f:523.25, w:7 },
 ];
 
-const KEYS_MAP = ['a','s','d','f','g','h','j','k'];
-const NOTE_EMOJIS = ['♪','♫','♬','🎵','🎶'];
+/* QWERTY key -> NOTE_DEFS index */
+const KEYMAP = { a:0, w:1, s:2, e:3, d:4, f:5, t:6, g:7, y:8, h:9, u:10, j:11, k:12 };
+const KEY_FOR = ['A','W','S','E','D','F','T','G','Y','H','U','J','K'];
 
-// ═══════════════════════════════════════════
-//  Audio — load a real meow & pitch-shift it
-// ═══════════════════════════════════════════
-let audioCtx, meowBuffer;
+/* 3 meow voices — natural fundamental of each recorded cat */
+const VOICES = {
+  low:  { ref:300 },
+  mid:  { ref:400 },
+  high: { ref:590 },
+};
+const BUBBLE = { low:'mrrrow~', mid:'meow!', high:'nyaa~' };
+const NOTE_EMOJI = ['♪','♫','♬','🎵','🎶','🐾'];
 
-async function initAudio() {
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const fill = document.getElementById('loaderFill');
-
-  // We'll try multiple sources in case one is blocked
-  const sources = [
-    'https://bigsoundbank.com/UPLOAD/mp3/1890.mp3',
-    'https://bigsoundbank.com/UPLOAD/mp3/1901.mp3',
-  ];
-
-  fill.style.width = '30%';
-
-  for (const url of sources) {
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) continue;
-      fill.style.width = '60%';
-      const arrayBuf = await resp.arrayBuffer();
-      fill.style.width = '85%';
-      meowBuffer = await audioCtx.decodeAudioData(arrayBuf);
-      fill.style.width = '100%';
-      break;
-    } catch(e) {
-      console.warn('Failed to load meow from', url, e);
-    }
+function pickVoice(freq) {
+  let best = 'mid', bd = Infinity;
+  for (const k in VOICES) {
+    const d = Math.abs(Math.log(freq / VOICES[k].ref));
+    if (d < bd) { bd = d; best = k; }
   }
-
-  // If external fetch fails, fall back to a decent synth meow
-  if (!meowBuffer) {
-    console.log('Generating synthetic meow fallback');
-    meowBuffer = generateSynthMeow(audioCtx);
-    fill.style.width = '100%';
-  }
-
-  setTimeout(() => {
-    document.getElementById('loader').classList.add('hide');
-  }, 350);
+  return best;
 }
 
-function generateSynthMeow(ctx) {
-  // Fallback: procedural meow, better than before
-  const sr = ctx.sampleRate;
-  const dur = 0.5;
-  const len = sr * dur;
+/* ════════════ Cat artwork (top-down lounging cat, inline SVG) ════════════
+   Drawn long & narrow so each cat lounges along a full piano key.        */
+function catSVG(c) {
+  const dark   = c.furDark;
+  const points = c.points || null;          // Siamese-style dark points
+  const earOut = points || c.fur;
+  const pawCol = points || c.belly;
+  const rim    = c.rim
+    ? `<rect x="32" y="150" width="136" height="346" rx="66" fill="none" stroke="${c.rim}" stroke-width="3"/>
+       <ellipse cx="100" cy="150" rx="81" ry="83" fill="none" stroke="${c.rim}" stroke-width="3"/>`
+    : '';
+  const mask = points
+    ? `<ellipse cx="100" cy="166" rx="66" ry="60" fill="${points}" opacity="0.9"/>`
+    : '';
+  const stripes = c.stripes
+    ? `<g fill="none" stroke="${dark}" stroke-width="12" stroke-linecap="round" opacity="0.42">
+         <path d="M56 250 Q100 234 144 250"/>
+         <path d="M50 308 Q100 290 150 308"/>
+         <path d="M50 366 Q100 348 150 366"/>
+         <path d="M52 424 Q100 408 148 424"/>
+         <path d="M60 472 Q100 460 140 472"/>
+       </g>`
+    : '';
+  return `
+  <svg class="cat" viewBox="0 0 200 520" xmlns="http://www.w3.org/2000/svg">
+    <g class="tail-l">
+      <path d="M150 476 Q183 448 177 386 Q173 346 146 336"
+            fill="none" stroke="${dark}" stroke-width="30" stroke-linecap="round"/>
+      <path d="M150 476 Q183 448 177 386 Q173 346 146 336"
+            fill="none" stroke="${c.fur}" stroke-width="22" stroke-linecap="round"/>
+    </g>
+    <rect x="32" y="150" width="136" height="346" rx="66" fill="${c.fur}" stroke="${dark}" stroke-width="5"/>
+    <g class="ears">
+      <path d="M48 122 L26 26 L104 90 Z"  fill="${earOut}" stroke="${dark}" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M152 122 L174 26 L96 90 Z" fill="${earOut}" stroke="${dark}" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M54 108 L40 48 L92 88 Z"   fill="${c.ear}"/>
+      <path d="M146 108 L160 48 L108 88 Z" fill="${c.ear}"/>
+    </g>
+    <ellipse cx="100" cy="150" rx="81" ry="83" fill="${c.fur}" stroke="${dark}" stroke-width="5"/>
+    <ellipse cx="100" cy="348" rx="52" ry="142" fill="${c.belly}" opacity="0.55"/>
+    ${stripes}
+    ${mask}
+    ${rim}
+    <ellipse cx="52"  cy="252" rx="23" ry="30" fill="${pawCol}" stroke="${dark}" stroke-width="4"/>
+    <ellipse cx="148" cy="252" rx="23" ry="30" fill="${pawCol}" stroke="${dark}" stroke-width="4"/>
+    <ellipse cx="50"  cy="452" rx="30" ry="37" fill="${pawCol}" stroke="${dark}" stroke-width="4"/>
+    <ellipse cx="150" cy="452" rx="30" ry="37" fill="${pawCol}" stroke="${dark}" stroke-width="4"/>
+    <g class="face">
+      <g class="eyes-open">
+        <ellipse cx="72" cy="150" rx="12.5" ry="16" fill="${c.eye}"/>
+        <ellipse cx="128" cy="150" rx="12.5" ry="16" fill="${c.eye}"/>
+        <circle cx="76.5" cy="143" r="4.2" fill="#fff" opacity="0.92"/>
+        <circle cx="132.5" cy="143" r="4.2" fill="#fff" opacity="0.92"/>
+      </g>
+      <g class="eyes-shut">
+        <path d="M57 154 Q72 138 87 154"    fill="none" stroke="#2a2030" stroke-width="6" stroke-linecap="round"/>
+        <path d="M113 154 Q128 138 143 154" fill="none" stroke="#2a2030" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <path d="M90 174 L110 174 L100 186 Z" fill="${c.nose}" stroke="${dark}" stroke-width="2"/>
+      <path class="mouth-idle" d="M100 186 Q89 199 78 191 M100 186 Q111 199 122 191"
+            fill="none" stroke="#2a2030" stroke-width="4" stroke-linecap="round"/>
+      <g class="mouth-sing">
+        <ellipse cx="100" cy="200" rx="14"  ry="17" fill="#3a2030"/>
+        <ellipse cx="100" cy="207" rx="7.5" ry="9"  fill="${c.nose}"/>
+      </g>
+      <g stroke="${c.whisker}" stroke-width="2.8" stroke-linecap="round" fill="none">
+        <path d="M56 182 Q28 178 8 187"/>
+        <path d="M56 196 Q28 200 7 211"/>
+        <path d="M144 182 Q172 178 192 187"/>
+        <path d="M144 196 Q172 200 193 211"/>
+      </g>
+    </g>
+  </svg>`;
+}
+
+/* ════════════ Build the piano ════════════ */
+const piano  = document.getElementById('piano');
+const whites = document.getElementById('whites');
+const blacks = document.getElementById('blacks');
+const stage  = document.getElementById('stage');
+
+const keyEls = [];   // indexed by NOTE_DEFS index
+let whiteCount = 0;
+
+NOTE_DEFS.forEach((nd, idx) => {
+  const isBlack = nd.b !== undefined;
+  const cat = isBlack ? BLACK_CATS[nd.b] : WHITE_CATS[nd.w];
+  const voice = pickVoice(nd.f);
+  nd.voice = voice;
+  nd.rate  = nd.f / VOICES[voice].ref;
+  nd.pan   = (idx / (NOTE_DEFS.length - 1) - 0.5) * 0.7;
+  nd.cat   = cat;
+
+  const el = document.createElement('div');
+  el.className = 'key ' + (isBlack ? 'black' : 'white');
+  el.dataset.idx = idx;
+  el.style.setProperty('--glow', isBlack
+    ? 'rgba(190,150,255,.6)'
+    : 'rgba(255,190,140,.6)');
+  el.innerHTML =
+    `<div class="bubble">${BUBBLE[voice]}</div>` +
+    catSVG(cat) +
+    `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx]}</span></div>`;
+
+  if (isBlack) blacks.appendChild(el);
+  else { whites.appendChild(el); whiteCount++; }
+  keyEls[idx] = el;
+});
+
+/* ════════════ Responsive layout + rotation ════════════ */
+let rotated = false;
+
+const KEY_ASPECT = 2.6;   // white-key height / width — matches the cat viewBox
+
+function layout() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  // "along" = direction the key row runs; "cross" = key depth direction
+  const along = rotated ? vh : vw;
+  const cross = rotated ? vw : vh;
+
+  // track length is limited by the screen length AND by key depth fitting the cross axis
+  const trackLen = Math.min(along * 0.99, cross * 0.8 * whiteCount / KEY_ASPECT, 1180);
+  const ww = trackLen / whiteCount;
+  const depth = ww * KEY_ASPECT;
+  const bw = ww * 0.62;
+
+  piano.style.width  = trackLen + 'px';
+  piano.style.height = depth + 'px';
+  piano.style.setProperty('--ww', ww + 'px');
+  piano.style.setProperty('--bw', bw + 'px');
+
+  NOTE_DEFS.forEach((nd, idx) => {
+    if (nd.b !== undefined) {
+      keyEls[idx].style.left = (nd.before * ww - bw / 2) + 'px';
+    }
+  });
+  stage.classList.toggle('rotated', rotated);
+}
+window.addEventListener('resize', layout);
+window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+layout();
+
+document.getElementById('rotateBtn').addEventListener('click', () => {
+  rotated = !rotated;
+  layout();
+});
+
+/* ════════════ Audio ════════════ */
+let ctx = null, master = null;
+let audioReady = false;
+const buffers = {};   // voice -> AudioBuffer
+
+function b64ToArrayBuffer(b64) {
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function initAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  master = ctx.createDynamicsCompressor();
+  master.threshold.value = -14;
+  master.knee.value = 22;
+  master.ratio.value = 5;
+  master.attack.value = 0.003;
+  master.release.value = 0.25;
+  master.connect(ctx.destination);
+
+  const meows = window.MEOWS || {};
+  await Promise.all(Object.keys(VOICES).map(async (v) => {
+    try {
+      if (!meows[v]) throw new Error('missing ' + v);
+      buffers[v] = await ctx.decodeAudioData(b64ToArrayBuffer(meows[v]));
+    } catch (err) {
+      console.warn('meow decode failed for', v, '— using synth fallback', err);
+      buffers[v] = synthMeow(VOICES[v].ref);
+    }
+  }));
+  audioReady = true;
+}
+
+/* Procedural meow — only used if a sample fails to decode */
+function synthMeow(baseHz) {
+  const sr = ctx.sampleRate, dur = 0.6, len = (sr * dur) | 0;
   const buf = ctx.createBuffer(1, len, sr);
   const d = buf.getChannelData(0);
-
   for (let i = 0; i < len; i++) {
     const t = i / sr;
-    const env = Math.exp(-t * 5) * Math.min(t * 30, 1);
-    // Pitch glide: start high, drop, rise slightly
-    const f0 = 800 - 200 * t + 80 * Math.sin(t * 12);
-    const phase = f0 * 2 * Math.PI * t;
-    // Mix of harmonics for nasal quality
-    const s = 0.5 * Math.sin(phase)
-            + 0.3 * Math.sin(phase * 2.02)
-            + 0.15 * Math.sin(phase * 3.01)
-            + 0.08 * Math.sin(phase * 5.03);
-    d[i] = s * env * 0.4;
+    const env = Math.exp(-t * 4.2) * Math.min(t * 28, 1);
+    const f0 = baseHz * (1.15 - 0.35 * t + 0.12 * Math.sin(t * 11));
+    const ph = 2 * Math.PI * f0 * t;
+    d[i] = env * 0.4 * (
+      0.55 * Math.sin(ph) +
+      0.30 * Math.sin(ph * 2.01) +
+      0.12 * Math.sin(ph * 3.02) +
+      0.06 * Math.sin(ph * 5.03)
+    );
   }
   return buf;
 }
 
-function playMeow(rate) {
-  if (!audioCtx || !meowBuffer) return;
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+function playNote(nd) {
+  if (!audioReady) return;
+  if (ctx.state === 'suspended') ctx.resume();
 
-  const src = audioCtx.createBufferSource();
-  src.buffer = meowBuffer;
-  src.playbackRate.value = rate;
+  const buf = buffers[nd.voice];
+  if (!buf) return;
 
-  // A little compression to keep the pitch-shifted versions even
-  const comp = audioCtx.createDynamicsCompressor();
-  comp.threshold.value = -18;
-  comp.ratio.value = 6;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  // gentle per-tap detune so repeats aren't robotic
+  src.playbackRate.value = nd.rate * (1 + (Math.random() * 2 - 1) * 0.014);
 
-  // Gentle bandpass to keep it sounding cat-like across pitches
-  const bp = audioCtx.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = 1200 * rate;
-  bp.Q.value = 0.7;
+  // light tone shaping keeps every pitch sounding cat-like, not buzzy
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 130;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 8200;
 
-  const gain = audioCtx.createGain();
-  gain.gain.value = 0.7;
+  const gain = ctx.createGain();
+  // tame the loud high voice a touch so the keyboard stays even
+  gain.gain.value = 0.92 - Math.max(0, nd.rate - 1) * 0.22;
 
-  src.connect(bp);
-  bp.connect(comp);
-  comp.connect(gain);
-  gain.connect(audioCtx.destination);
+  let out = gain;
+  if (ctx.createStereoPanner) {
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = nd.pan;
+    gain.connect(pan);
+    out = pan;
+  }
+  src.connect(hp); hp.connect(lp); lp.connect(gain);
+  out.connect(master);
   src.start(0);
 }
 
-// ═══════════════════════════════════════════
-//  Build the piano
-// ═══════════════════════════════════════════
-const piano = document.getElementById('piano');
-
-CATS.forEach((cat, i) => {
-  const el = document.createElement('div');
-  el.className = 'cat-key';
-  el.dataset.idx = i;
-  el.style.setProperty('--fur', cat.fur);
-  el.style.setProperty('--belly', cat.belly);
-  el.style.setProperty('--inner', cat.inner);
-  el.style.setProperty('--glow', cat.glow);
-  el.style.setProperty('--paw-c', cat.belly);
-
-  el.innerHTML = `
-    <div class="meow-pop">${cat.meow}</div>
-    <div class="cat-loaf">
-      <div class="body-fill"></div>
-      <div class="ear l"></div>
-      <div class="ear r"></div>
-      <div class="face">
-        <div class="eyes"><div class="eye"></div><div class="eye"></div></div>
-        <div class="nose"></div>
-        <div class="whiskers">
-          <div class="whisker wl1"></div><div class="whisker wl2"></div>
-          <div class="whisker wr1"></div><div class="whisker wr2"></div>
-        </div>
-        <div class="mouth"><div class="mouth-h"></div><div class="mouth-h"></div></div>
-      </div>
-      ${cat.tabby ? '<div class="stripes"><div class="stripe"></div><div class="stripe"></div><div class="stripe"></div></div>' : ''}
-      <div class="paws"><div class="paw"></div><div class="paw"></div></div>
-      <div class="tail"></div>
-    </div>
-    <div class="key-label">${KEYS_MAP[i].toUpperCase()} · ${cat.name}</div>
-  `;
-
-  el.addEventListener('pointerdown', e => { e.preventDefault(); fire(i); });
-  piano.appendChild(el);
-});
-
-function fire(i) {
-  const cat = CATS[i];
-  const el = piano.children[i];
-  playMeow(cat.rate);
-
-  el.classList.remove('pressed');
-  void el.offsetWidth; // reflow
-  el.classList.add('pressed');
-  setTimeout(() => el.classList.remove('pressed'), 380);
-  spawnNote(el, cat.glow);
+/* ════════════ Trigger (sound + animation) ════════════ */
+function trigger(idx) {
+  const nd = NOTE_DEFS[idx];
+  const el = keyEls[idx];
+  if (!nd || !el) return;
+  playNote(nd);
+  el.classList.remove('down');
+  void el.offsetWidth;            // restart CSS animation
+  el.classList.add('down');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('down'), 420);
+  spawnNote(el);
 }
 
-function spawnNote(el, color) {
+function spawnNote(el) {
+  const r = el.getBoundingClientRect();
   const n = document.createElement('div');
   n.className = 'float-note';
-  n.textContent = NOTE_EMOJIS[Math.random() * NOTE_EMOJIS.length | 0];
-  const r = el.getBoundingClientRect();
-  n.style.left = r.left + r.width / 2 + 'px';
-  n.style.top = r.top + 'px';
-  n.style.color = color;
-  n.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
-  n.style.setProperty('--rot', (Math.random() * 50 - 25) + 'deg');
+  n.textContent = NOTE_EMOJI[(Math.random() * NOTE_EMOJI.length) | 0];
+  n.style.left = (r.left + r.width / 2) + 'px';
+  n.style.top  = (r.top + r.height * 0.3) + 'px';
+  n.style.setProperty('--dx', (Math.random() * 80 - 40) + 'px');
+  n.style.setProperty('--rot', (Math.random() * 70 - 35) + 'deg');
   document.body.appendChild(n);
-  setTimeout(() => n.remove(), 1200);
+  setTimeout(() => n.remove(), 1100);
 }
 
-// ── Keyboard ──
-const held = new Set();
-document.addEventListener('keydown', e => {
-  const k = e.key.toLowerCase();
-  const i = KEYS_MAP.indexOf(k);
-  if (i >= 0 && !held.has(k)) { held.add(k); fire(i); }
-});
-document.addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+/* ════════════ Pointer input (multi-touch + glissando) ════════════ */
+const pointerKey = new Map();   // pointerId -> last idx played
 
-// ── Stars ──
+function keyIdxAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const k = el && el.closest && el.closest('.key');
+  return k ? +k.dataset.idx : -1;
+}
+
+piano.addEventListener('pointerdown', (e) => {
+  const idx = keyIdxAt(e.clientX, e.clientY);
+  if (idx < 0) return;
+  e.preventDefault();
+  pointerKey.set(e.pointerId, idx);
+  trigger(idx);
+}, { passive: false });
+
+piano.addEventListener('pointermove', (e) => {
+  if (!pointerKey.has(e.pointerId)) return;
+  const idx = keyIdxAt(e.clientX, e.clientY);
+  if (idx >= 0 && idx !== pointerKey.get(e.pointerId)) {
+    pointerKey.set(e.pointerId, idx);
+    trigger(idx);            // slide across keys = glissando
+  }
+}, { passive: false });
+
+function endPointer(e) { pointerKey.delete(e.pointerId); }
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
+
+/* ── Keyboard ── */
+const held = new Set();
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k in KEYMAP && !held.has(k)) {
+    held.add(k);
+    trigger(KEYMAP[k]);
+  }
+});
+window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
+
+/* ════════════ Starfield ════════════ */
 const starsEl = document.getElementById('stars');
-for (let i = 0; i < 70; i++) {
+const starFrag = document.createDocumentFragment();
+for (let i = 0; i < 55; i++) {
   const s = document.createElement('div');
   s.className = 'star';
   s.style.left = Math.random() * 100 + '%';
-  s.style.top = Math.random() * 100 + '%';
-  s.style.setProperty('--dur', (1.5 + Math.random() * 4) + 's');
-  s.style.setProperty('--o', (0.25 + Math.random() * 0.75).toFixed(2));
+  s.style.top  = Math.random() * 100 + '%';
+  s.style.setProperty('--dur', (1.6 + Math.random() * 4) + 's');
+  s.style.setProperty('--o', (0.25 + Math.random() * 0.7).toFixed(2));
   s.style.animationDelay = Math.random() * 3 + 's';
-  starsEl.appendChild(s);
+  starFrag.appendChild(s);
 }
+starsEl.appendChild(starFrag);
 
-// ── Init ──
-initAudio();
+/* ════════════ Start overlay ════════════ */
+const startEl = document.getElementById('start');
+function begin() {
+  startEl.removeEventListener('pointerdown', begin);
+  startEl.removeEventListener('keydown', begin);
+  initAudio();
+  startEl.classList.add('hide');
+  setTimeout(() => startEl.remove(), 600);
+}
+startEl.addEventListener('pointerdown', begin);
+window.addEventListener('keydown', begin, { once: true });
 </script>
 </body>
 </html>
