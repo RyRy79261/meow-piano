@@ -51,6 +51,58 @@
     color: rgba(255,200,240,.32);
   }
   @media (max-height: 430px) { .hint { display: none; } }
+  body.expert .topbar { display: none; }
+
+  /* ── Expert toggle button (top-left) ── */
+  .expert-btn {
+    position: fixed; top: 10px; left: 12px; z-index: 60;
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 16px; border-radius: 22px;
+    border: 1px solid rgba(255,180,255,.22);
+    background: rgba(40,24,58,.9); color: #ffccee;
+    font-family: 'Fredoka', sans-serif; font-weight: 600;
+    font-size: .82rem; letter-spacing: .04em;
+    cursor: pointer; backdrop-filter: blur(6px);
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    transition: transform .15s ease, background .2s;
+  }
+  .expert-btn:active { transform: scale(.92); }
+  body.expert .expert-btn {
+    background: rgba(96,42,118,.94);
+    border-color: rgba(255,180,255,.42);
+  }
+
+  /* ── Song bar (expert mode) ── */
+  .songbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 55;
+    display: none; flex-direction: column; align-items: center; gap: 6px;
+    padding: 10px 12px 8px;
+    pointer-events: none;
+  }
+  body.expert .songbar { display: flex; }
+  .songbar .row {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    pointer-events: auto;
+  }
+  .song-btn {
+    padding: 8px 14px; border-radius: 20px;
+    border: 1px solid rgba(255,180,255,.2);
+    background: rgba(36,22,52,.92); color: #ffd9f0;
+    font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: .8rem;
+    cursor: pointer; white-space: nowrap;
+    transition: transform .12s ease, background .2s, box-shadow .2s, opacity .2s;
+  }
+  .song-btn:active { transform: scale(.93); }
+  .song-btn.playing {
+    background: linear-gradient(90deg, #f4a7bb, #c4a7e8); color: #2a1233;
+    box-shadow: 0 0 22px rgba(230,150,220,.55);
+  }
+  .song-btn.stop { background: rgba(74,30,42,.92); }
+  .now-playing {
+    font-family: 'Caveat', cursive; font-size: 1.15rem; color: #ffccee;
+    text-shadow: 0 0 14px rgba(255,140,210,.5);
+    min-height: 1.25em; pointer-events: none;
+  }
 
   /* ── Stage ── */
   .stage {
@@ -73,6 +125,7 @@
       0 0 90px rgba(150,70,200,.12),
       inset 0 2px 0 rgba(255,255,255,.05);
   }
+  body.expert .piano-body { border-radius: 10px; }
 
   .whites { display: flex; height: 100%; width: 100%; }
   .blacks { position: absolute; top: 0; left: 0; right: 0; height: 62%; pointer-events: none; }
@@ -135,6 +188,7 @@
     opacity: 0; z-index: 20;
   }
   .key.down .bubble { animation: pop .6s ease-out; }
+  body.expert .bubble { display: none; }
   @keyframes pop {
     0%   { opacity: 0; transform: translate(-50%, 4px) scale(.4); }
     30%  { opacity: 1; transform: translate(-50%, -22px) scale(1.15); }
@@ -168,6 +222,7 @@
   .rotate-btn:active { transform: scale(.88); background: rgba(60,36,84,.95); }
   .rotate-btn span { transition: transform .45s cubic-bezier(.6,-0.2,.3,1.3); }
   .stage.rotated ~ .rotate-btn span { transform: rotate(90deg); }
+  body.expert .rotate-btn { display: none; }
 
   /* ── Start overlay ── */
   #start {
@@ -190,7 +245,8 @@
     animation: pulse 2s ease-in-out infinite;
   }
   @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
-  #start .note { font-size:.72rem; color: rgba(255,200,240,.4); letter-spacing:.1em; }
+  #start .note { font-size:.72rem; color: rgba(255,200,240,.4); letter-spacing:.08em;
+    max-width: 280px; text-align: center; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -200,6 +256,19 @@
 <div class="topbar">
   <span class="logo">🐱 Meowsic</span>
   <span class="hint">tap a kitty &middot; play a tune</span>
+</div>
+
+<button class="expert-btn" id="expertBtn">
+  <span id="expertIcon">✦</span><span id="expertLabel">Expert</span>
+</button>
+
+<div class="songbar" id="songbar">
+  <div class="now-playing" id="nowPlaying"></div>
+  <div class="row">
+    <button class="song-btn" data-song="bumblebee">🐝 Flight of the Bumblebee</button>
+    <button class="song-btn" data-song="mountainking">👑 Hall of the Mountain King</button>
+    <button class="song-btn stop" id="stopBtn">⏹ Stop</button>
+  </div>
 </div>
 
 <div class="stage" id="stage">
@@ -217,7 +286,7 @@
   <div class="big-cat">🐾</div>
   <div class="title">Meowsic</div>
   <div class="go">tap to wake the kittens</div>
-  <div class="note">a piano made of cats</div>
+  <div class="note">a piano made of cats — tap ✦ Expert up top for the full self-playing grand</div>
 </div>
 
 <script src="/meows.js"></script>
@@ -228,6 +297,11 @@
    White keys: tabbies (low) grading up to cream / Siamese / white.
    Black keys: black cats, stacked on top between the white keys.
    Audio: 3 real meow voices (low/mid/high) pitch-mapped per note.
+
+   Two modes:
+     • Normal — one octave + high C, tap to play.
+     • Expert — a full 88-key grand that can play itself
+                (Flight of the Bumblebee, Hall of the Mountain King).
    ════════════════════════════════════════════════════════════ */
 
 /* ── Cats ── */
@@ -253,24 +327,12 @@ const BLACK_CATS = [
   rim:'rgba(190,178,224,.4)', whisker:'rgba(255,255,255,.85)', isBlack:true,
 }));
 
-/* ── Notes (one octave + high C) ── */
-const NOTE_DEFS = [
-  { n:'C',  f:261.63, w:0 },
-  { n:'C♯', f:277.18, b:0, before:1 },
-  { n:'D',  f:293.66, w:1 },
-  { n:'D♯', f:311.13, b:1, before:2 },
-  { n:'E',  f:329.63, w:2 },
-  { n:'F',  f:349.23, w:3 },
-  { n:'F♯', f:369.99, b:2, before:3 },
-  { n:'G',  f:392.00, w:4 },
-  { n:'G♯', f:415.30, b:3, before:4 },
-  { n:'A',  f:440.00, w:5 },
-  { n:'A♯', f:466.16, b:4, before:5 },
-  { n:'B',  f:493.88, w:6 },
-  { n:'C',  f:523.25, w:7 },
-];
+/* ── Note theory ── */
+const PC_NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+function isBlackPc(pc) { return pc===1 || pc===3 || pc===6 || pc===8 || pc===10; }
+function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
-/* QWERTY key -> NOTE_DEFS index */
+/* QWERTY key -> NOTE_DEFS index (normal mode, one octave) */
 const KEYMAP = { a:0, w:1, s:2, e:3, d:4, f:5, t:6, g:7, y:8, h:9, u:10, j:11, k:12 };
 const KEY_FOR = ['A','W','S','E','D','F','T','G','Y','H','U','J','K'];
 
@@ -373,47 +435,92 @@ const whites = document.getElementById('whites');
 const blacks = document.getElementById('blacks');
 const stage  = document.getElementById('stage');
 
-const keyEls = [];   // indexed by NOTE_DEFS index
+/* Key ranges (inclusive MIDI note numbers). C4 = 60. */
+const RANGE_NORMAL = [60, 72];   // one octave + high C
+const RANGE_EXPERT = [21, 108];  // full 88-key piano, A0 → C8
+
+let NOTE_DEFS  = [];             // current keyboard, rebuilt per mode
+let keyEls     = [];             // DOM element per NOTE_DEFS index
 let whiteCount = 0;
+let midiToIdx  = new Map();      // MIDI note -> NOTE_DEFS index
+let expert     = false;
 
-NOTE_DEFS.forEach((nd, idx) => {
-  const isBlack = nd.b !== undefined;
-  const cat = isBlack ? BLACK_CATS[nd.b] : WHITE_CATS[nd.w];
-  const voice = pickVoice(nd.f);
-  nd.voice = voice;
-  nd.rate  = nd.f / VOICES[voice].ref;
-  nd.pan   = (idx / (NOTE_DEFS.length - 1) - 0.5) * 0.7;
-  nd.cat   = cat;
+function buildNoteDefs(lo, hi) {
+  const defs = [];
+  let wIdx = 0, bIdx = 0, whitesSoFar = 0;
+  for (let m = lo; m <= hi; m++) {
+    const pc = m % 12;
+    const nd = { midi:m, n:PC_NAMES[pc], oct:Math.floor(m / 12) - 1, f:midiToFreq(m) };
+    if (isBlackPc(pc)) { nd.b = bIdx++; nd.before = whitesSoFar; }
+    else               { nd.w = wIdx++; whitesSoFar++; }
+    defs.push(nd);
+  }
+  return defs;
+}
 
-  const el = document.createElement('div');
-  el.className = 'key ' + (isBlack ? 'black' : 'white');
-  el.dataset.idx = idx;
-  el.style.setProperty('--glow', isBlack
-    ? 'rgba(190,150,255,.6)'
-    : 'rgba(255,190,140,.6)');
-  el.innerHTML =
-    `<div class="bubble">${BUBBLE[voice]}</div>` +
-    catSVG(cat) +
-    `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx]}</span></div>`;
+function buildPiano() {
+  const [lo, hi] = expert ? RANGE_EXPERT : RANGE_NORMAL;
+  NOTE_DEFS = buildNoteDefs(lo, hi);
+  whites.innerHTML = '';
+  blacks.innerHTML = '';
+  keyEls = [];
+  whiteCount = 0;
+  midiToIdx.clear();
 
-  if (isBlack) blacks.appendChild(el);
-  else { whites.appendChild(el); whiteCount++; }
-  keyEls[idx] = el;
-});
+  const total = NOTE_DEFS.length;
+  NOTE_DEFS.forEach((nd, idx) => {
+    const isBlack = nd.b !== undefined;
+    const cat = isBlack
+      ? BLACK_CATS[nd.b % BLACK_CATS.length]
+      : WHITE_CATS[nd.w % WHITE_CATS.length];
+    const voice = pickVoice(nd.f);
+    nd.voice = voice;
+    nd.rate  = nd.f / VOICES[voice].ref;
+    nd.pan   = (total > 1 ? idx / (total - 1) - 0.5 : 0) * 0.7;
+    nd.cat   = cat;
+
+    const el = document.createElement('div');
+    el.className = 'key ' + (isBlack ? 'black' : 'white');
+    el.dataset.idx = idx;
+    el.style.setProperty('--glow', isBlack
+      ? 'rgba(190,150,255,.6)'
+      : 'rgba(255,190,140,.6)');
+
+    // labels only in normal mode — expert keys are far too narrow for text
+    const label = expert
+      ? ''
+      : `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx] || ''}</span></div>`;
+    el.innerHTML =
+      `<div class="bubble">${BUBBLE[voice]}</div>` +
+      catSVG(cat) +
+      label;
+
+    if (isBlack) blacks.appendChild(el);
+    else { whites.appendChild(el); whiteCount++; }
+    keyEls[idx] = el;
+    midiToIdx.set(nd.midi, idx);
+  });
+  layout();
+}
 
 /* ════════════ Responsive layout + rotation ════════════ */
-let rotated = false;
+let rotated = false;        // is the key row rotated 90° (manual or auto)
 
-const KEY_ASPECT = 2.6;   // white-key height / width — matches the cat viewBox
+const KEY_ASPECT = 2.6;     // white-key height / width — matches the cat viewBox
 
 function layout() {
   const vw = window.innerWidth, vh = window.innerHeight;
+
+  // Expert mode always runs the keyboard along the LONGEST screen edge.
+  if (expert) rotated = vh > vw;
+
   // "along" = direction the key row runs; "cross" = key depth direction
   const along = rotated ? vh : vw;
   const cross = rotated ? vw : vh;
 
   // track length is limited by the screen length AND by key depth fitting the cross axis
-  const trackLen = Math.min(along * 0.99, cross * 0.8 * whiteCount / KEY_ASPECT, 1180);
+  const cap = expert ? 3400 : 1180;
+  const trackLen = Math.min(along * 0.99, cross * 0.8 * whiteCount / KEY_ASPECT, cap);
   const ww = trackLen / whiteCount;
   const depth = ww * KEY_ASPECT;
   const bw = ww * 0.62;
@@ -432,9 +539,9 @@ function layout() {
 }
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', () => setTimeout(layout, 250));
-layout();
 
 document.getElementById('rotateBtn').addEventListener('click', () => {
+  if (expert) return;          // expert rotation is automatic
   rotated = !rotated;
   layout();
 });
@@ -442,7 +549,8 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
 /* ════════════ Audio ════════════ */
 let ctx = null, master = null;
 let audioReady = false;
-const buffers = {};   // voice -> AudioBuffer
+let playbackGain = 1;          // dipped while a song plays itself
+const buffers = {};            // voice -> AudioBuffer
 
 function b64ToArrayBuffer(b64) {
   const bin = atob(b64);
@@ -497,7 +605,8 @@ function synthMeow(baseHz) {
   return buf;
 }
 
-function playNote(nd) {
+/* opts: { dur } cuts the meow short (staccato), { gain } scales loudness */
+function playNote(nd, opts) {
   if (!audioReady) return;
   if (ctx.state === 'suspended') ctx.resume();
 
@@ -517,7 +626,10 @@ function playNote(nd) {
 
   const gain = ctx.createGain();
   // tame the loud high voice a touch so the keyboard stays even
-  gain.gain.value = 0.92 - Math.max(0, nd.rate - 1) * 0.22;
+  let g = 0.92 - Math.max(0, nd.rate - 1) * 0.22;
+  g *= playbackGain;
+  if (opts && opts.gain !== undefined) g *= opts.gain;
+  gain.gain.value = g;
 
   let out = gain;
   if (ctx.createStereoPanner) {
@@ -529,14 +641,24 @@ function playNote(nd) {
   src.connect(hp); hp.connect(lp); lp.connect(gain);
   out.connect(master);
   src.start(0);
+
+  // staccato: fade the meow out early so fast runs don't smear
+  if (opts && opts.dur) {
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(g, t + opts.dur);
+    gain.gain.linearRampToValueAtTime(0.0001, t + opts.dur + 0.06);
+    try { src.stop(t + opts.dur + 0.09); } catch (e) {}
+  }
 }
 
 /* ════════════ Trigger (sound + animation) ════════════ */
-function trigger(idx) {
+let lastFloat = 0;
+
+function trigger(idx, opts) {
   const nd = NOTE_DEFS[idx];
   const el = keyEls[idx];
   if (!nd || !el) return;
-  playNote(nd);
+  playNote(nd, opts);
   el.classList.remove('down');
   void el.offsetWidth;            // restart CSS animation
   el.classList.add('down');
@@ -545,7 +667,17 @@ function trigger(idx) {
   spawnNote(el);
 }
 
+function triggerMidi(m, opts) {
+  const idx = midiToIdx.get(m);
+  if (idx !== undefined) trigger(idx, opts);
+}
+
 function spawnNote(el) {
+  // rate-limit during blistering self-play so the DOM stays light
+  const now = performance.now();
+  if (now - lastFloat < 55) return;
+  lastFloat = now;
+
   const r = el.getBoundingClientRect();
   const n = document.createElement('div');
   n.className = 'float-note';
@@ -588,9 +720,10 @@ function endPointer(e) { pointerKey.delete(e.pointerId); }
 window.addEventListener('pointerup', endPointer);
 window.addEventListener('pointercancel', endPointer);
 
-/* ── Keyboard ── */
+/* ── Keyboard (normal mode only) ── */
 const held = new Set();
 window.addEventListener('keydown', (e) => {
+  if (expert) return;
   const k = e.key.toLowerCase();
   if (k in KEYMAP && !held.has(k)) {
     held.add(k);
@@ -598,6 +731,181 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
+
+/* ════════════════════════════════════════════════════════════
+   SELF-PLAYING PIANO — public-domain showpieces
+   ════════════════════════════════════════════════════════════ */
+
+/* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
+   Perpetual-motion chromatic 16ths: cascading semitone runs that weave
+   down and back up the keyboard, then a buzzing climb to the high C. */
+function genBumblebee() {
+  const seq = [];
+  const run = (a, b) => {            // inclusive chromatic run, either direction
+    const s = a < b ? 1 : -1;
+    for (let m = a; m !== b + s; m += s) seq.push(m);
+  };
+  run(84, 72); run(72, 79); run(79, 72); run(72, 84);
+  run(84, 71); run(71, 78); run(78, 67); run(67, 79);
+  run(79, 68); run(68, 80); run(80, 69); run(69, 84);
+  run(84, 72); run(72, 84);
+
+  const dt = 0.092;                  // ~11 notes/sec — frantic but clean
+  const out = [];
+  let t = 0;
+  for (const m of seq) { out.push({ midi:m, t, dur:0.15 }); t += dt; }
+  out.push({ midi:84, t: t + 0.05, dur:0.7, gain:1.15 });   // the bee lands
+  return out;
+}
+
+/* In the Hall of the Mountain King — Grieg, Peer Gynt (1875, public domain).
+   The creeping theme played three times — low, middle, high octave — with
+   a steady accelerando, the way the troll hall scene speeds up. */
+function genMountainKing() {
+  // semitone offsets from C4; the theme as a letter-note sequence
+  const THEME = [0,2,4,0,4,3,3,2,2,0,2,4,0,4,-3,-5,4,0,4,7,
+                 0,2,4,0,4,3,3,2,2,0,2,4,0,4,7,4,2];
+  const BASE = 60;
+  const OCTAVES = [-12, 0, 12];
+  const total = THEME.length * OCTAVES.length;
+  const out = [];
+  let t = 0, i = 0;
+  for (const oct of OCTAVES) {
+    for (const off of THEME) {
+      const step = 0.30 - (i / total) * 0.20;          // 0.30s → 0.10s
+      out.push({ midi: BASE + oct + off, t, dur: Math.max(0.16, step * 0.9) });
+      t += step;
+      i++;
+    }
+  }
+  // a final ringing low/mid/high tonic cluster
+  out.push({ midi: BASE - 12, t, dur:1.0 });
+  out.push({ midi: BASE,      t, dur:1.0 });
+  out.push({ midi: BASE + 12, t, dur:1.0, gain:1.1 });
+  return out;
+}
+
+const SONGS = {
+  bumblebee:    { title:'Flight of the Bumblebee', gain:0.62, gen:genBumblebee },
+  mountainking: { title:'In the Hall of the Mountain King', gain:0.6, gen:genMountainKing },
+};
+
+/* ── Playback engine ── */
+let songTimers = [];
+let playing = false;
+let playingKey = null;
+
+const nowPlayingEl = document.getElementById('nowPlaying');
+const stopBtn = document.getElementById('stopBtn');
+
+function updateSongUI() {
+  document.querySelectorAll('.song-btn[data-song]').forEach((b) => {
+    b.classList.toggle('playing', playing && b.dataset.song === playingKey);
+  });
+  nowPlayingEl.textContent = playing ? '♫ ' + SONGS[playingKey].title + ' ♫' : '';
+  stopBtn.style.opacity = playing ? 1 : 0.45;
+}
+
+function stopSong() {
+  songTimers.forEach(clearTimeout);
+  songTimers = [];
+  if (playing) {
+    playing = false;
+    playingKey = null;
+    playbackGain = 1;
+    updateSongUI();
+  }
+}
+
+function playSong(key) {
+  if (!expert || !audioReady) return;
+  const def = SONGS[key];
+  if (!def) return;
+  stopSong();
+
+  const events = def.gen();
+  playing = true;
+  playingKey = key;
+  playbackGain = def.gain;
+  updateSongUI();
+
+  let end = 0;
+  for (const ev of events) {
+    end = Math.max(end, ev.t + (ev.dur || 0));
+    songTimers.push(setTimeout(
+      () => triggerMidi(ev.midi, { dur: ev.dur, gain: ev.gain }),
+      ev.t * 1000));
+  }
+  songTimers.push(setTimeout(stopSong, end * 1000 + 900));
+}
+
+document.querySelectorAll('.song-btn[data-song]').forEach((b) => {
+  b.addEventListener('click', () => {
+    if (playing && playingKey === b.dataset.song) stopSong();
+    else playSong(b.dataset.song);
+  });
+});
+stopBtn.addEventListener('click', stopSong);
+
+/* ════════════ Expert mode (full grand + fullscreen landscape) ════════════ */
+const expertBtn   = document.getElementById('expertBtn');
+const expertIcon  = document.getElementById('expertIcon');
+const expertLabel = document.getElementById('expertLabel');
+
+function goFullscreenLandscape() {
+  const de = document.documentElement;
+  const req = de.requestFullscreen || de.webkitRequestFullscreen;
+  const lock = () => {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch (e) {}
+  };
+  let p = null;
+  try { if (req) p = req.call(de); } catch (e) { p = null; }
+  if (p && p.then) p.then(lock, lock);
+  else lock();
+}
+
+function exitFullscreen() {
+  try {
+    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+  } catch (e) {}
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
+    try { exit.call(document); } catch (e) {}
+  }
+}
+
+function updateExpertUI() {
+  document.body.classList.toggle('expert', expert);
+  expertIcon.textContent  = expert ? '✕' : '✦';
+  expertLabel.textContent = expert ? 'Exit' : 'Expert';
+}
+
+function enterExpert() {
+  if (expert) return;
+  expert = true;
+  updateExpertUI();
+  buildPiano();
+  goFullscreenLandscape();
+}
+
+function exitExpert() {
+  if (!expert) return;
+  stopSong();
+  expert = false;
+  rotated = false;
+  updateExpertUI();
+  exitFullscreen();
+  buildPiano();
+}
+
+expertBtn.addEventListener('click', () => {
+  if (!audioReady) initAudio();      // in case expert is the first thing tapped
+  expert ? exitExpert() : enterExpert();
+});
 
 /* ════════════ Starfield ════════════ */
 const starsEl = document.getElementById('stars');
@@ -614,11 +922,12 @@ for (let i = 0; i < 55; i++) {
 }
 starsEl.appendChild(starFrag);
 
-/* ════════════ Start overlay ════════════ */
+/* ════════════ Boot ════════════ */
+buildPiano();          // normal mode keyboard
+
 const startEl = document.getElementById('start');
 function begin() {
   startEl.removeEventListener('pointerdown', begin);
-  startEl.removeEventListener('keydown', begin);
   initAudio();
   startEl.classList.add('hide');
   setTimeout(() => startEl.remove(), 600);
