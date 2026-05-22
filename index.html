@@ -780,32 +780,27 @@ function genBumblebee() {
 }
 
 /* In the Hall of the Mountain King — Grieg, Peer Gynt (1875, public domain).
-   Phrase A creeps up a fifth (1 2 ♭3 4 5 ♭3 5); phrase B answers with the
-   eerie rising semitone to ♭6 and walks back down to the tonic. The whole
-   theme repeats three times in one octave, speeding up and getting louder
-   — the troll-hall accelerando — staying in a clean pitch range. */
+   Just the creeping 1 2 ♭3 4 5 ♭3 5 motif as an ostinato — accelerating
+   and growing louder, the way Grieg wrote it (and the way Backstreet's
+   Back famously lifts it).                                              */
 function genMountainKing() {
-  // semitone degrees above the tonic
-  const PHRASE_A = [0, 2, 3, 5, 7, 3, 7];   // A  B  C  D  E  C  E
-  const PHRASE_B = [8, 7, 5, 3, 7, 3, 0];   // F  E  D  C  E  C  A
-  const THEME = PHRASE_A.concat(PHRASE_B);
-  const BASE = 62;                          // keeps every note near rate 1.0
-  const PASSES = 3;
-  const total = THEME.length * PASSES;
+  const MOTIF = [0, 2, 3, 5, 7, 3, 7];      // 1 2 ♭3 4 5 ♭3 5 — the famous shape
+  const BASE = 62;                          // D minor, sits centred in the keyboard
+  const REPEATS = 6;
+  const total = MOTIF.length * REPEATS;
   const out = [];
   let t = 0, i = 0;
-  for (let p = 0; p < PASSES; p++) {
-    for (const deg of THEME) {
-      const frac = i / total;
-      const step = 0.44 - frac * 0.18;       // accelerando: 0.44s → 0.26s
-      const gain = 0.55 + frac * 0.45;       // crescendo
-      // generous dur so the meow's onset and body have time to sound
-      out.push({ midi: BASE + deg, t, dur: Math.max(0.34, step * 1.05), gain, release: 0.28 });
+  for (let r = 0; r < REPEATS; r++) {
+    for (const deg of MOTIF) {
+      const frac = i / (total - 1);
+      const step = 0.46 - frac * 0.30;       // accelerando: 0.46s → 0.16s
+      const gain = 0.42 + frac * 0.62;       // crescendo from quiet to loud
+      out.push({ midi: BASE + deg, t, dur: Math.max(0.28, step * 1.05), gain, release: 0.22 });
       t += step;
       i++;
     }
   }
-  out.push({ midi: BASE, t: t + 0.05, dur: 0.9, gain: 1.05, release: 0.6 });   // land on the tonic
+  out.push({ midi: BASE, t: t + 0.04, dur: 1.0, gain: 1.1, release: 0.6 });    // land on the tonic
   return out;
 }
 
