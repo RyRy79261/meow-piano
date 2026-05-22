@@ -783,8 +783,8 @@ window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
    ════════════════════════════════════════════════════════════ */
 
 /* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
-   Perpetual-motion chromatic runs that cascade down and weave back up.
-   Kept inside ~1.4 octaves so the meow stays in a clear pitch range. */
+   Chromatic runs that cascade down and weave back up. Kept inside
+   ~1.4 octaves, and paced so each meow has room to sound out. */
 function genBumblebee() {
   const seq = [];
   const run = (a, b) => {            // inclusive chromatic run, either direction
@@ -792,15 +792,14 @@ function genBumblebee() {
     for (let m = a; m !== b + s; m += s) seq.push(m);
   };
   run(75, 63); run(63, 70); run(70, 63); run(63, 75);
-  run(75, 62); run(62, 69); run(69, 58); run(58, 70);
-  run(70, 59); run(59, 71); run(71, 60); run(60, 75);
-  run(75, 63); run(63, 75);
+  run(75, 62); run(62, 69); run(69, 58); run(58, 72);
+  run(72, 60); run(60, 75);
 
-  const dt = 0.10;                   // ~10 notes/sec — frantic but trackable
+  const dt = 0.16;                   // ~6 notes/sec — lively but each meow sings
   const out = [];
   let t = 0;
-  for (const m of seq) { out.push({ midi:m, t, dur:0.11, gain:0.85 }); t += dt; }
-  out.push({ midi:75, t: t + 0.04, dur:0.6, gain:1.0 });    // the bee lands
+  for (const m of seq) { out.push({ midi:m, t, dur:0.30, gain:0.85 }); t += dt; }
+  out.push({ midi:75, t: t + 0.06, dur:0.7, gain:1.0 });    // the bee lands
   return out;
 }
 
@@ -822,14 +821,14 @@ function genMountainKing() {
   for (let p = 0; p < PASSES; p++) {
     for (const deg of THEME) {
       const frac = i / total;
-      const step = 0.34 - frac * 0.17;       // accelerando: 0.34s → 0.17s
+      const step = 0.50 - frac * 0.17;       // accelerando: 0.50s → 0.33s
       const gain = 0.5 + frac * 0.5;         // crescendo
-      out.push({ midi: BASE + deg, t, dur: Math.min(0.42, step * 0.95), gain });
+      out.push({ midi: BASE + deg, t, dur: step * 0.9, gain });
       t += step;
       i++;
     }
   }
-  out.push({ midi: BASE, t: t + 0.05, dur: 1.1, gain: 1.05 });   // land on the tonic
+  out.push({ midi: BASE, t: t + 0.06, dur: 1.2, gain: 1.05 });   // land on the tonic
   return out;
 }
 
