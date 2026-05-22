@@ -51,35 +51,14 @@
     color: rgba(255,200,240,.32);
   }
   @media (max-height: 430px) { .hint { display: none; } }
-  body.expert .topbar { display: none; }
 
-  /* ── Expert toggle button (top-left) ── */
-  .expert-btn {
-    position: fixed; top: 10px; left: 12px; z-index: 60;
-    display: flex; align-items: center; gap: 6px;
-    padding: 9px 16px; border-radius: 22px;
-    border: 1px solid rgba(255,180,255,.22);
-    background: rgba(40,24,58,.9); color: #ffccee;
-    font-family: 'Fredoka', sans-serif; font-weight: 600;
-    font-size: .82rem; letter-spacing: .04em;
-    cursor: pointer; backdrop-filter: blur(6px);
-    box-shadow: 0 6px 20px rgba(0,0,0,.5);
-    transition: transform .15s ease, background .2s;
-  }
-  .expert-btn:active { transform: scale(.92); }
-  body.expert .expert-btn {
-    background: rgba(96,42,118,.94);
-    border-color: rgba(255,180,255,.42);
-  }
-
-  /* ── Song bar (expert mode) ── */
+  /* ── Song bar ── */
   .songbar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 55;
-    display: none; flex-direction: column; align-items: center; gap: 6px;
-    padding: 10px 12px 8px;
+    position: fixed; top: 38px; left: 0; right: 0; z-index: 55;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 6px 12px 8px;
     pointer-events: none;
   }
-  body.expert .songbar { display: flex; }
   .songbar .row {
     display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
     pointer-events: auto;
@@ -125,7 +104,6 @@
       0 0 90px rgba(150,70,200,.12),
       inset 0 2px 0 rgba(255,255,255,.05);
   }
-  body.expert .piano-body { border-radius: 10px; }
 
   .whites { display: flex; height: 100%; width: 100%; }
   .blacks { position: absolute; top: 0; left: 0; right: 0; height: 62%; pointer-events: none; }
@@ -188,7 +166,6 @@
     opacity: 0; z-index: 20;
   }
   .key.down .bubble { animation: pop .6s ease-out; }
-  body.expert .bubble { display: none; }
   @keyframes pop {
     0%   { opacity: 0; transform: translate(-50%, 4px) scale(.4); }
     30%  { opacity: 1; transform: translate(-50%, -22px) scale(1.15); }
@@ -222,7 +199,6 @@
   .rotate-btn:active { transform: scale(.88); background: rgba(60,36,84,.95); }
   .rotate-btn span { transition: transform .45s cubic-bezier(.6,-0.2,.3,1.3); }
   .stage.rotated ~ .rotate-btn span { transform: rotate(90deg); }
-  body.expert .rotate-btn { display: none; }
 
   /* ── Start overlay ── */
   #start {
@@ -258,10 +234,6 @@
   <span class="hint">tap a kitty &middot; play a tune</span>
 </div>
 
-<button class="expert-btn" id="expertBtn">
-  <span id="expertIcon">✦</span><span id="expertLabel">Expert</span>
-</button>
-
 <div class="songbar" id="songbar">
   <div class="now-playing" id="nowPlaying"></div>
   <div class="row">
@@ -286,7 +258,7 @@
   <div class="big-cat">🐾</div>
   <div class="title">Meowsic</div>
   <div class="go">tap to wake the kittens</div>
-  <div class="note">a piano made of cats — tap ✦ Expert up top for the full self-playing grand</div>
+  <div class="note">a piano made of cats — hit a song button to hear it played itself</div>
 </div>
 
 <script src="/meows.js"></script>
@@ -296,12 +268,9 @@
    MEOWSIC — a cat piano.
    White keys: tabbies (low) grading up to cream / Siamese / white.
    Black keys: black cats, stacked on top between the white keys.
-   Audio: a tuned sampler built from a real meow recording (see below).
-
-   Two modes:
-     • Normal — one octave + high C, tap to play.
-     • Expert — a full 88-key grand that can play itself
-                (Flight of the Bumblebee, Hall of the Mountain King).
+   Audio: real meow recordings, played natural — see the audio section.
+   Tap a cat to play it; tap a song button to hear it play itself
+   (Flight of the Bumblebee, Hall of the Mountain King).
    ════════════════════════════════════════════════════════════ */
 
 /* ── Cats ── */
@@ -435,15 +404,13 @@ const whites = document.getElementById('whites');
 const blacks = document.getElementById('blacks');
 const stage  = document.getElementById('stage');
 
-/* Key ranges (inclusive MIDI note numbers). C4 = 60. */
-const RANGE_NORMAL = [60, 72];   // one octave + high C
-const RANGE_EXPERT = [21, 108];  // full 88-key piano, A0 → C8
+/* Keyboard range (inclusive MIDI). C4 = 60 — one octave + high C. */
+const RANGE_LO = 60, RANGE_HI = 72;
 
-let NOTE_DEFS  = [];             // current keyboard, rebuilt per mode
+let NOTE_DEFS  = [];
 let keyEls     = [];             // DOM element per NOTE_DEFS index
 let whiteCount = 0;
 let midiToIdx  = new Map();      // MIDI note -> NOTE_DEFS index
-let expert     = false;
 
 function buildNoteDefs(lo, hi) {
   const defs = [];
@@ -459,8 +426,7 @@ function buildNoteDefs(lo, hi) {
 }
 
 function buildPiano() {
-  const [lo, hi] = expert ? RANGE_EXPERT : RANGE_NORMAL;
-  NOTE_DEFS = buildNoteDefs(lo, hi);
+  NOTE_DEFS = buildNoteDefs(RANGE_LO, RANGE_HI);
   whites.innerHTML = '';
   blacks.innerHTML = '';
   keyEls = [];
@@ -486,10 +452,7 @@ function buildPiano() {
       ? 'rgba(190,150,255,.6)'
       : 'rgba(255,190,140,.6)');
 
-    // labels only in normal mode — expert keys are far too narrow for text
-    const label = expert
-      ? ''
-      : `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx] || ''}</span></div>`;
+    const label = `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx] || ''}</span></div>`;
     el.innerHTML =
       `<div class="bubble">${BUBBLE[voice]}</div>` +
       catSVG(cat) +
@@ -511,16 +474,12 @@ const KEY_ASPECT = 2.6;     // white-key height / width — matches the cat view
 function layout() {
   const vw = window.innerWidth, vh = window.innerHeight;
 
-  // Expert mode always runs the keyboard along the LONGEST screen edge.
-  if (expert) rotated = vh > vw;
-
   // "along" = direction the key row runs; "cross" = key depth direction
   const along = rotated ? vh : vw;
   const cross = rotated ? vw : vh;
 
   // track length is limited by the screen length AND by key depth fitting the cross axis
-  const cap = expert ? 3400 : 1180;
-  const trackLen = Math.min(along * 0.99, cross * 0.8 * whiteCount / KEY_ASPECT, cap);
+  const trackLen = Math.min(along * 0.99, cross * 0.8 * whiteCount / KEY_ASPECT, 1180);
   const ww = trackLen / whiteCount;
   const depth = ww * KEY_ASPECT;
   const bw = ww * 0.62;
@@ -541,7 +500,6 @@ window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', () => setTimeout(layout, 250));
 
 document.getElementById('rotateBtn').addEventListener('click', () => {
-  if (expert) return;          // expert rotation is automatic
   rotated = !rotated;
   layout();
 });
@@ -785,10 +743,9 @@ function endPointer(e) { pointerKey.delete(e.pointerId); }
 window.addEventListener('pointerup', endPointer);
 window.addEventListener('pointercancel', endPointer);
 
-/* ── Keyboard (normal mode only) ── */
+/* ── Keyboard ── */
 const held = new Set();
 window.addEventListener('keydown', (e) => {
-  if (expert) return;
   const k = e.key.toLowerCase();
   if (k in KEYMAP && !held.has(k)) {
     held.add(k);
@@ -802,24 +759,23 @@ window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
    ════════════════════════════════════════════════════════════ */
 
 /* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
-   Chromatic runs that cascade down and weave back up. Kept inside
-   ~1.4 octaves, and paced so each meow has room to sound out. */
+   Chromatic runs that cascade down and weave back up — kept inside the
+   keyboard's one-octave-plus-C range so each meow is at home pitch.    */
 function genBumblebee() {
   const seq = [];
   const run = (a, b) => {            // inclusive chromatic run, either direction
     const s = a < b ? 1 : -1;
     for (let m = a; m !== b + s; m += s) seq.push(m);
   };
-  run(75, 63); run(63, 70); run(70, 63); run(63, 75);
-  run(75, 62); run(62, 69); run(69, 58); run(58, 72);
-  run(72, 60); run(60, 75);
+  run(72, 60); run(60, 67); run(67, 60); run(60, 72);
+  run(72, 61); run(61, 68); run(68, 60); run(60, 71);
+  run(71, 60); run(60, 72);
 
   const dt = 0.14;                   // brisk perpetual motion
   const out = [];
   let t = 0;
-  // each note rings long enough for the full meow onset + body to sound
   for (const m of seq) { out.push({ midi:m, t, dur:0.26, gain:0.78, release:0.18 }); t += dt; }
-  out.push({ midi:75, t: t + 0.05, dur:0.6, gain:1.0, release:0.45 });    // the bee lands
+  out.push({ midi:72, t: t + 0.05, dur:0.6, gain:1.0, release:0.45 });    // the bee lands
   return out;
 }
 
@@ -885,7 +841,7 @@ function stopSong() {
 }
 
 function playSong(key) {
-  if (!expert || !audioReady) return;
+  if (!audioReady) return;
   const def = SONGS[key];
   if (!def) return;
   stopSong();
@@ -912,66 +868,6 @@ document.querySelectorAll('.song-btn[data-song]').forEach((b) => {
   });
 });
 stopBtn.addEventListener('click', stopSong);
-
-/* ════════════ Expert mode (full grand + fullscreen landscape) ════════════ */
-const expertBtn   = document.getElementById('expertBtn');
-const expertIcon  = document.getElementById('expertIcon');
-const expertLabel = document.getElementById('expertLabel');
-
-function goFullscreenLandscape() {
-  const de = document.documentElement;
-  const req = de.requestFullscreen || de.webkitRequestFullscreen;
-  const lock = () => {
-    try {
-      if (screen.orientation && screen.orientation.lock) {
-        screen.orientation.lock('landscape').catch(() => {});
-      }
-    } catch (e) {}
-  };
-  let p = null;
-  try { if (req) p = req.call(de); } catch (e) { p = null; }
-  if (p && p.then) p.then(lock, lock);
-  else lock();
-}
-
-function exitFullscreen() {
-  try {
-    if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
-  } catch (e) {}
-  const exit = document.exitFullscreen || document.webkitExitFullscreen;
-  if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) {
-    try { exit.call(document); } catch (e) {}
-  }
-}
-
-function updateExpertUI() {
-  document.body.classList.toggle('expert', expert);
-  expertIcon.textContent  = expert ? '✕' : '✦';
-  expertLabel.textContent = expert ? 'Exit' : 'Expert';
-}
-
-function enterExpert() {
-  if (expert) return;
-  expert = true;
-  updateExpertUI();
-  buildPiano();
-  goFullscreenLandscape();
-}
-
-function exitExpert() {
-  if (!expert) return;
-  stopSong();
-  expert = false;
-  rotated = false;
-  updateExpertUI();
-  exitFullscreen();
-  buildPiano();
-}
-
-expertBtn.addEventListener('click', () => {
-  if (!audioReady) initAudio();      // in case expert is the first thing tapped
-  expert ? exitExpert() : enterExpert();
-});
 
 /* ════════════ Starfield ════════════ */
 const starsEl = document.getElementById('stars');
