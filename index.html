@@ -52,6 +52,37 @@
   }
   @media (max-height: 430px) { .hint { display: none; } }
 
+  /* ── Song bar ── */
+  .songbar {
+    position: fixed; top: 38px; left: 0; right: 0; z-index: 55;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 6px 12px 8px;
+    pointer-events: none;
+  }
+  .songbar .row {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    pointer-events: auto;
+  }
+  .song-btn {
+    padding: 8px 14px; border-radius: 20px;
+    border: 1px solid rgba(255,180,255,.2);
+    background: rgba(36,22,52,.92); color: #ffd9f0;
+    font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: .8rem;
+    cursor: pointer; white-space: nowrap;
+    transition: transform .12s ease, background .2s, box-shadow .2s, opacity .2s;
+  }
+  .song-btn:active { transform: scale(.93); }
+  .song-btn.playing {
+    background: linear-gradient(90deg, #f4a7bb, #c4a7e8); color: #2a1233;
+    box-shadow: 0 0 22px rgba(230,150,220,.55);
+  }
+  .song-btn.stop { background: rgba(74,30,42,.92); }
+  .now-playing {
+    font-family: 'Caveat', cursive; font-size: 1.15rem; color: #ffccee;
+    text-shadow: 0 0 14px rgba(255,140,210,.5);
+    min-height: 1.25em; pointer-events: none;
+  }
+
   /* ── Stage ── */
   .stage {
     position: fixed; inset: 0;
@@ -190,7 +221,8 @@
     animation: pulse 2s ease-in-out infinite;
   }
   @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
-  #start .note { font-size:.72rem; color: rgba(255,200,240,.4); letter-spacing:.1em; }
+  #start .note { font-size:.72rem; color: rgba(255,200,240,.4); letter-spacing:.08em;
+    max-width: 280px; text-align: center; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -200,6 +232,15 @@
 <div class="topbar">
   <span class="logo">🐱 Meowsic</span>
   <span class="hint">tap a kitty &middot; play a tune</span>
+</div>
+
+<div class="songbar" id="songbar">
+  <div class="now-playing" id="nowPlaying"></div>
+  <div class="row">
+    <button class="song-btn" data-song="bumblebee">🐝 Flight of the Bumblebee</button>
+    <button class="song-btn" data-song="mountainking">👑 Hall of the Mountain King</button>
+    <button class="song-btn stop" id="stopBtn">⏹ Stop</button>
+  </div>
 </div>
 
 <div class="stage" id="stage">
@@ -217,7 +258,7 @@
   <div class="big-cat">🐾</div>
   <div class="title">Meowsic</div>
   <div class="go">tap to wake the kittens</div>
-  <div class="note">a piano made of cats</div>
+  <div class="note">a piano made of cats — hit a song button to hear it played itself</div>
 </div>
 
 <script src="/meows.js"></script>
@@ -227,7 +268,9 @@
    MEOWSIC — a cat piano.
    White keys: tabbies (low) grading up to cream / Siamese / white.
    Black keys: black cats, stacked on top between the white keys.
-   Audio: 3 real meow voices (low/mid/high) pitch-mapped per note.
+   Audio: real meow recordings, played natural — see the audio section.
+   Tap a cat to play it; tap a song button to hear it play itself
+   (Flight of the Bumblebee, Hall of the Mountain King).
    ════════════════════════════════════════════════════════════ */
 
 /* ── Cats ── */
@@ -253,24 +296,12 @@ const BLACK_CATS = [
   rim:'rgba(190,178,224,.4)', whisker:'rgba(255,255,255,.85)', isBlack:true,
 }));
 
-/* ── Notes (one octave + high C) ── */
-const NOTE_DEFS = [
-  { n:'C',  f:261.63, w:0 },
-  { n:'C♯', f:277.18, b:0, before:1 },
-  { n:'D',  f:293.66, w:1 },
-  { n:'D♯', f:311.13, b:1, before:2 },
-  { n:'E',  f:329.63, w:2 },
-  { n:'F',  f:349.23, w:3 },
-  { n:'F♯', f:369.99, b:2, before:3 },
-  { n:'G',  f:392.00, w:4 },
-  { n:'G♯', f:415.30, b:3, before:4 },
-  { n:'A',  f:440.00, w:5 },
-  { n:'A♯', f:466.16, b:4, before:5 },
-  { n:'B',  f:493.88, w:6 },
-  { n:'C',  f:523.25, w:7 },
-];
+/* ── Note theory ── */
+const PC_NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+function isBlackPc(pc) { return pc===1 || pc===3 || pc===6 || pc===8 || pc===10; }
+function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
-/* QWERTY key -> NOTE_DEFS index */
+/* QWERTY key -> NOTE_DEFS index (normal mode, one octave) */
 const KEYMAP = { a:0, w:1, s:2, e:3, d:4, f:5, t:6, g:7, y:8, h:9, u:10, j:11, k:12 };
 const KEY_FOR = ['A','W','S','E','D','F','T','G','Y','H','U','J','K'];
 
@@ -373,41 +404,79 @@ const whites = document.getElementById('whites');
 const blacks = document.getElementById('blacks');
 const stage  = document.getElementById('stage');
 
-const keyEls = [];   // indexed by NOTE_DEFS index
+/* Keyboard range (inclusive MIDI). 49 keys, C2 → C6 — a 4-octave small
+   MIDI-controller size. Songs live in the upper half (C4 → C6) where the
+   two tonal samples sit; the lower octaves are for tap-play, where the
+   low-voice sweep gives a great "deep cat" character. */
+const RANGE_LO = 36, RANGE_HI = 84;
+
+let NOTE_DEFS  = [];
+let keyEls     = [];             // DOM element per NOTE_DEFS index
 let whiteCount = 0;
+let midiToIdx  = new Map();      // MIDI note -> NOTE_DEFS index
 
-NOTE_DEFS.forEach((nd, idx) => {
-  const isBlack = nd.b !== undefined;
-  const cat = isBlack ? BLACK_CATS[nd.b] : WHITE_CATS[nd.w];
-  const voice = pickVoice(nd.f);
-  nd.voice = voice;
-  nd.rate  = nd.f / VOICES[voice].ref;
-  nd.pan   = (idx / (NOTE_DEFS.length - 1) - 0.5) * 0.7;
-  nd.cat   = cat;
+function buildNoteDefs(lo, hi) {
+  const defs = [];
+  let wIdx = 0, bIdx = 0, whitesSoFar = 0;
+  for (let m = lo; m <= hi; m++) {
+    const pc = m % 12;
+    const nd = { midi:m, n:PC_NAMES[pc], oct:Math.floor(m / 12) - 1, f:midiToFreq(m) };
+    if (isBlackPc(pc)) { nd.b = bIdx++; nd.before = whitesSoFar; }
+    else               { nd.w = wIdx++; whitesSoFar++; }
+    defs.push(nd);
+  }
+  return defs;
+}
 
-  const el = document.createElement('div');
-  el.className = 'key ' + (isBlack ? 'black' : 'white');
-  el.dataset.idx = idx;
-  el.style.setProperty('--glow', isBlack
-    ? 'rgba(190,150,255,.6)'
-    : 'rgba(255,190,140,.6)');
-  el.innerHTML =
-    `<div class="bubble">${BUBBLE[voice]}</div>` +
-    catSVG(cat) +
-    `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx]}</span></div>`;
+function buildPiano() {
+  NOTE_DEFS = buildNoteDefs(RANGE_LO, RANGE_HI);
+  whites.innerHTML = '';
+  blacks.innerHTML = '';
+  keyEls = [];
+  whiteCount = 0;
+  midiToIdx.clear();
 
-  if (isBlack) blacks.appendChild(el);
-  else { whites.appendChild(el); whiteCount++; }
-  keyEls[idx] = el;
-});
+  const total = NOTE_DEFS.length;
+  NOTE_DEFS.forEach((nd, idx) => {
+    const isBlack = nd.b !== undefined;
+    const cat = isBlack
+      ? BLACK_CATS[nd.b % BLACK_CATS.length]
+      : WHITE_CATS[nd.w % WHITE_CATS.length];
+    const voice = pickVoice(nd.f);
+    nd.voice = voice;
+    nd.rate  = nd.f / VOICES[voice].ref;
+    nd.pan   = (total > 1 ? idx / (total - 1) - 0.5 : 0) * 0.7;
+    nd.cat   = cat;
+
+    const el = document.createElement('div');
+    el.className = 'key ' + (isBlack ? 'black' : 'white');
+    el.dataset.idx = idx;
+    el.style.setProperty('--glow', isBlack
+      ? 'rgba(190,150,255,.6)'
+      : 'rgba(255,190,140,.6)');
+
+    const label = `<div class="label">${nd.n}<span style="opacity:.55"> &middot; ${KEY_FOR[idx] || ''}</span></div>`;
+    el.innerHTML =
+      `<div class="bubble">${BUBBLE[voice]}</div>` +
+      catSVG(cat) +
+      label;
+
+    if (isBlack) blacks.appendChild(el);
+    else { whites.appendChild(el); whiteCount++; }
+    keyEls[idx] = el;
+    midiToIdx.set(nd.midi, idx);
+  });
+  layout();
+}
 
 /* ════════════ Responsive layout + rotation ════════════ */
-let rotated = false;
+let rotated = false;        // is the key row rotated 90° (manual or auto)
 
-const KEY_ASPECT = 2.6;   // white-key height / width — matches the cat viewBox
+const KEY_ASPECT = 2.6;     // white-key height / width — matches the cat viewBox
 
 function layout() {
   const vw = window.innerWidth, vh = window.innerHeight;
+
   // "along" = direction the key row runs; "cross" = key depth direction
   const along = rotated ? vh : vw;
   const cross = rotated ? vw : vh;
@@ -432,17 +501,42 @@ function layout() {
 }
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', () => setTimeout(layout, 250));
-layout();
 
 document.getElementById('rotateBtn').addEventListener('click', () => {
   rotated = !rotated;
   layout();
 });
 
-/* ════════════ Audio ════════════ */
+/* ════════════ Audio — natural meow instrument ═══════════════════════
+   Each note plays a WHOLE meow recording (onset + body + decay) so it
+   always sounds like a real cat, never a sustained drone.
+
+   • Free-play taps keep the three-voice variety (low / mid / high cat).
+   • Self-playing songs route through the steady mid recording so every
+     melody note is in tune relative to the next.
+
+   This is multisample-ready: as more cat recordings are added (see
+   EXTRA_SAMPLES below), the engine picks the closest-pitched sample
+   for each note and only pitch-shifts by a small amount — the proper
+   multisampling design.
+*/
 let ctx = null, master = null;
 let audioReady = false;
-const buffers = {};   // voice -> AudioBuffer
+const buffers = {};            // raw decoded recordings per voice
+let melodicSamples = [];       // tonal samples used for self-played songs
+
+/* ── To add more cat sounds for the melodies ──────────────────────────
+   1. Drop a recording in /sounds/ (WAV or OGG).
+   2. Add an entry below: { file: 'sounds/<name>.wav', root: <Hz> }.
+      `root` is the recording's main pitch. (440Hz = A4, 523Hz = C5,
+      etc. Trial-and-error works — adjust until the note sounds in tune
+      when the song plays.)
+   The engine automatically picks the closest-pitched sample per note,
+   so the more recordings you add, the more meow-like the melodies stay
+   (less pitch-shifting per note).                                       */
+const EXTRA_SAMPLES = [
+  // { file: 'sounds/cat_a4.wav', root: 440 },
+];
 
 function b64ToArrayBuffer(b64) {
   const bin = atob(b64);
@@ -474,69 +568,130 @@ async function initAudio() {
       buffers[v] = synthMeow(VOICES[v].ref);
     }
   }));
+
+  // Two-sample multisample for songs. YIN pitch detection confirms:
+  //   meow_mid  ≈ 410 Hz steady  (G#4)
+  //   meow_high ≈ 1175 Hz steady (D6)
+  // The engine picks whichever sample is closer to each note's target
+  // pitch, so the pitch-shift per note stays small and the meows keep
+  // their character. (meow_low sweeps 300→1200Hz so it's not tonal —
+  // it stays as a tap voice only.)
+  melodicSamples = [
+    { buf: buffers.mid,  root: 410  },
+    { buf: buffers.high, root: 1175 },
+  ];
+
+  // Then load any user-added recordings as extra melodic samples.
+  await Promise.all(EXTRA_SAMPLES.map(async (e) => {
+    try {
+      const res = await fetch(e.file);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const ab = await res.arrayBuffer();
+      const buf = await ctx.decodeAudioData(ab);
+      melodicSamples.push({ buf, root: e.root });
+    } catch (err) {
+      console.warn('extra sample failed:', e.file, err);
+    }
+  }));
+
   audioReady = true;
 }
 
-/* Procedural meow — only used if a sample fails to decode */
+/* Procedural meow — only used if a recording fails to decode */
 function synthMeow(baseHz) {
-  const sr = ctx.sampleRate, dur = 0.6, len = (sr * dur) | 0;
+  const sr = ctx.sampleRate, dur = 0.7, len = (sr * dur) | 0;
   const buf = ctx.createBuffer(1, len, sr);
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) {
     const t = i / sr;
-    const env = Math.exp(-t * 4.2) * Math.min(t * 28, 1);
+    const env = Math.exp(-t * 3.0) * Math.min(t * 28, 1);
     const f0 = baseHz * (1.15 - 0.35 * t + 0.12 * Math.sin(t * 11));
     const ph = 2 * Math.PI * f0 * t;
     d[i] = env * 0.4 * (
-      0.55 * Math.sin(ph) +
-      0.30 * Math.sin(ph * 2.01) +
-      0.12 * Math.sin(ph * 3.02) +
-      0.06 * Math.sin(ph * 5.03)
+      0.55 * Math.sin(ph) + 0.30 * Math.sin(ph * 2.01) +
+      0.12 * Math.sin(ph * 3.02) + 0.06 * Math.sin(ph * 5.03)
     );
   }
   return buf;
 }
 
-function playNote(nd) {
-  if (!audioReady) return;
+/* Pick the recording whose natural pitch sits closest to a target freq. */
+function pickSample(freq) {
+  let best = null, bd = Infinity;
+  for (const s of melodicSamples) {
+    if (!s.buf) continue;
+    const d = Math.abs(Math.log(freq / s.root));
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+
+/* Play one natural cat meow. opts:
+     buf      AudioBuffer to play (required)
+     rate     playback rate (1 = native pitch)
+     dur      optional sustain time; omitted = plays its natural length
+     gain     peak gain (default 0.9)
+     release  fade time after dur (default 0.22)
+     pan      stereo pan -1..1                                            */
+function playMeow(opts) {
+  if (!audioReady || !opts || !opts.buf) return;
   if (ctx.state === 'suspended') ctx.resume();
 
-  const buf = buffers[nd.voice];
-  if (!buf) return;
-
   const src = ctx.createBufferSource();
-  src.buffer = buf;
-  // gentle per-tap detune so repeats aren't robotic
-  src.playbackRate.value = nd.rate * (1 + (Math.random() * 2 - 1) * 0.014);
+  src.buffer = opts.buf;
+  src.playbackRate.value = (opts.rate || 1) * (1 + (Math.random() * 2 - 1) * 0.01);
 
-  // light tone shaping keeps every pitch sounding cat-like, not buzzy
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'highpass'; hp.frequency.value = 130;
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 8200;
+  // gentle EQ — keep the meow's natural body
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 110;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';  lp.frequency.value = 9000;
 
-  const gain = ctx.createGain();
-  // tame the loud high voice a touch so the keyboard stays even
-  gain.gain.value = 0.92 - Math.max(0, nd.rate - 1) * 0.22;
+  const peak = opts.gain !== undefined ? opts.gain : 0.9;
+  const g = ctx.createGain();
+  const t = ctx.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + 0.006);    // anti-click only — preserve the natural attack
 
-  let out = gain;
+  if (opts.dur) {
+    const rel = opts.release || 0.22;
+    g.gain.setValueAtTime(peak, t + opts.dur);
+    g.gain.linearRampToValueAtTime(0.0001, t + opts.dur + rel);
+    try { src.stop(t + opts.dur + rel + 0.04); } catch (e) {}
+  }
+
+  let out = g;
   if (ctx.createStereoPanner) {
     const pan = ctx.createStereoPanner();
-    pan.pan.value = nd.pan;
-    gain.connect(pan);
+    pan.pan.value = opts.pan || 0;
+    g.connect(pan);
     out = pan;
   }
-  src.connect(hp); hp.connect(lp); lp.connect(gain);
+  src.connect(hp); hp.connect(lp); lp.connect(g);
   out.connect(master);
   src.start(0);
 }
 
 /* ════════════ Trigger (sound + animation) ════════════ */
-function trigger(idx) {
+let lastFloat = 0;
+
+function trigger(idx, opts) {
   const nd = NOTE_DEFS[idx];
   const el = keyEls[idx];
   if (!nd || !el) return;
-  playNote(nd);
+  opts = opts || {};
+  if (opts.song) {
+    // self-played songs: pick the closest-pitched tonal recording
+    const s = pickSample(nd.f);
+    if (s) playMeow({
+      buf: s.buf, rate: nd.f / s.root,
+      dur: opts.dur, gain: opts.gain, release: opts.release, pan: nd.pan,
+    });
+  } else {
+    // free-play taps: keep the three-cat variety
+    playMeow({
+      buf: buffers[nd.voice], rate: nd.rate,
+      dur: opts.dur, gain: opts.gain, release: opts.release, pan: nd.pan,
+    });
+  }
   el.classList.remove('down');
   void el.offsetWidth;            // restart CSS animation
   el.classList.add('down');
@@ -545,7 +700,17 @@ function trigger(idx) {
   spawnNote(el);
 }
 
+function triggerMidi(m, opts) {
+  const idx = midiToIdx.get(m);
+  if (idx !== undefined) trigger(idx, opts);
+}
+
 function spawnNote(el) {
+  // rate-limit during blistering self-play so the DOM stays light
+  const now = performance.now();
+  if (now - lastFloat < 55) return;
+  lastFloat = now;
+
   const r = el.getBoundingClientRect();
   const n = document.createElement('div');
   n.className = 'float-note';
@@ -599,6 +764,159 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
 
+/* ════════════════════════════════════════════════════════════
+   SELF-PLAYING PIANO — public-domain showpieces
+   ════════════════════════════════════════════════════════════ */
+
+/* ────────────────────────────────────────────────────────────────
+   Score format: every song below is just an array of [midi, beats]
+   tuples — like notes on a staff. midi = null means a rest. Beats
+   are multiples of a beat (0.5 = eighth note, 1 = quarter, 2 = half,
+   0.25 = sixteenth). A tempo (BPM) turns beats into seconds.
+   ──────────────────────────────────────────────────────────────── */
+function scoreToEvents(score, opts) {
+  opts = opts || {};
+  const articulation = opts.articulation !== undefined ? opts.articulation : 0.85;
+  const release      = opts.release      !== undefined ? opts.release      : 0.18;
+  const events = [];
+  let t = 0;
+  for (let i = 0; i < score.length; i++) {
+    const [midi, beats] = score[i];
+    const frac = score.length > 1 ? i / (score.length - 1) : 0;
+    const bpm  = typeof opts.bpm  === 'function' ? opts.bpm(frac)  : (opts.bpm  || 120);
+    const span = beats * 60 / bpm;
+    if (midi !== null && midi !== undefined) {
+      events.push({
+        midi, t,
+        dur: span * articulation,
+        gain: typeof opts.gain === 'function' ? opts.gain(frac)
+              : (opts.gain !== undefined ? opts.gain : 0.9),
+        release,
+      });
+    }
+    t += span;
+  }
+  return { events, totalT: t };
+}
+
+/* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
+   The iconic two-octave chromatic descent, then waves up and down the
+   keyboard, ending on a climactic ascent. Unrelenting 16th notes. */
+function genBumblebee() {
+  const notes = [];
+  const run = (a, b) => {
+    const s = a < b ? 1 : -1;
+    for (let m = a; m !== b + s; m += s) notes.push(m);
+  };
+  run(84, 60);   // ICONIC chromatic descent across two octaves (C6 → C4)
+  run(60, 72);   // wave up
+  run(72, 60);   // wave down
+  run(60, 79);   // up to G5
+  run(79, 64);   // descend to E4
+  run(64, 84);   // climactic ascent to high C
+
+  const score = notes.map(m => [m, 0.25]);    // straight 16ths
+  const { events, totalT } = scoreToEvents(score, {
+    bpm: 108,
+    gain: 0.78,
+    articulation: 0.85,
+    release: 0.16,
+  });
+  events.push({ midi: 84, t: totalT + 0.05, dur: 0.7, gain: 1.0, release: 0.5 });
+  return events;
+}
+
+/* In the Hall of the Mountain King — Grieg, Peer Gynt (1875, public domain).
+   The 1 2 ♭3 4 5 ♭3 5 creeping motif (six eighths + a held quarter — the
+   rhythmic breath that gives it the menace, and the riff Backstreet's
+   Back samples). Grieg MODULATES the motif upward as it accelerates and
+   crescendos through the troll-hall build, so the keyboard climbs as
+   the cats get louder and faster. */
+function genMountainKing() {
+  // motif as semitone degrees: 1 2 ♭3 4 5 ♭3 5 (quarter)
+  const MOTIF_DEGS = [0, 2, 3, 5, 7, 3, 7];
+  const MOTIF_BEATS = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1.0];
+  // each iteration's tonic — climbs C → Eb → G → C (an octave higher)
+  const BASES = [60, 60, 63, 63, 67, 67, 72];
+
+  const score = [];
+  for (const base of BASES) {
+    for (let k = 0; k < MOTIF_DEGS.length; k++) {
+      score.push([base + MOTIF_DEGS[k], MOTIF_BEATS[k]]);
+    }
+  }
+
+  const { events, totalT } = scoreToEvents(score, {
+    bpm:          frac => 92 + frac * 180,    // accelerando 92 → 272 BPM
+    gain:         frac => 0.38 + frac * 0.70, // crescendo: hush → roar
+    articulation: 0.78,                        // pizzicato — slight gap between notes
+    release:      0.18,
+  });
+  // Final low tonic, held — the troll hall settles.
+  events.push({ midi: 60, t: totalT + 0.08, dur: 1.4, gain: 1.1, release: 0.7 });
+  return events;
+}
+
+const SONGS = {
+  bumblebee:    { title:'Flight of the Bumblebee', gen:genBumblebee },
+  mountainking: { title:'In the Hall of the Mountain King', gen:genMountainKing },
+};
+
+/* ── Playback engine ── */
+let songTimers = [];
+let playing = false;
+let playingKey = null;
+
+const nowPlayingEl = document.getElementById('nowPlaying');
+const stopBtn = document.getElementById('stopBtn');
+
+function updateSongUI() {
+  document.querySelectorAll('.song-btn[data-song]').forEach((b) => {
+    b.classList.toggle('playing', playing && b.dataset.song === playingKey);
+  });
+  nowPlayingEl.textContent = playing ? '♫ ' + SONGS[playingKey].title + ' ♫' : '';
+  stopBtn.style.opacity = playing ? 1 : 0.45;
+}
+
+function stopSong() {
+  songTimers.forEach(clearTimeout);
+  songTimers = [];
+  if (playing) {
+    playing = false;
+    playingKey = null;
+    updateSongUI();
+  }
+}
+
+function playSong(key) {
+  if (!audioReady) return;
+  const def = SONGS[key];
+  if (!def) return;
+  stopSong();
+
+  const events = def.gen();
+  playing = true;
+  playingKey = key;
+  updateSongUI();
+
+  let end = 0;
+  for (const ev of events) {
+    end = Math.max(end, ev.t + (ev.dur || 0));
+    songTimers.push(setTimeout(
+      () => triggerMidi(ev.midi, { song: true, dur: ev.dur, gain: ev.gain, release: ev.release }),
+      ev.t * 1000));
+  }
+  songTimers.push(setTimeout(stopSong, end * 1000 + 900));
+}
+
+document.querySelectorAll('.song-btn[data-song]').forEach((b) => {
+  b.addEventListener('click', () => {
+    if (playing && playingKey === b.dataset.song) stopSong();
+    else playSong(b.dataset.song);
+  });
+});
+stopBtn.addEventListener('click', stopSong);
+
 /* ════════════ Starfield ════════════ */
 const starsEl = document.getElementById('stars');
 const starFrag = document.createDocumentFragment();
@@ -614,11 +932,12 @@ for (let i = 0; i < 55; i++) {
 }
 starsEl.appendChild(starFrag);
 
-/* ════════════ Start overlay ════════════ */
+/* ════════════ Boot ════════════ */
+buildPiano();          // normal mode keyboard
+
 const startEl = document.getElementById('start');
 function begin() {
   startEl.removeEventListener('pointerdown', begin);
-  startEl.removeEventListener('keydown', begin);
   initAudio();
   startEl.classList.add('hide');
   setTimeout(() => startEl.remove(), 600);
