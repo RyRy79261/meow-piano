@@ -758,50 +758,89 @@ window.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
    SELF-PLAYING PIANO — public-domain showpieces
    ════════════════════════════════════════════════════════════ */
 
+/* ────────────────────────────────────────────────────────────────
+   Score format: every song below is just an array of [midi, beats]
+   tuples — like notes on a staff. midi = null means a rest. Beats
+   are multiples of a beat (0.5 = eighth note, 1 = quarter, 2 = half,
+   0.25 = sixteenth). A tempo (BPM) turns beats into seconds.
+   ──────────────────────────────────────────────────────────────── */
+function scoreToEvents(score, opts) {
+  opts = opts || {};
+  const articulation = opts.articulation !== undefined ? opts.articulation : 0.85;
+  const release      = opts.release      !== undefined ? opts.release      : 0.18;
+  const events = [];
+  let t = 0;
+  for (let i = 0; i < score.length; i++) {
+    const [midi, beats] = score[i];
+    const frac = score.length > 1 ? i / (score.length - 1) : 0;
+    const bpm  = typeof opts.bpm  === 'function' ? opts.bpm(frac)  : (opts.bpm  || 120);
+    const span = beats * 60 / bpm;
+    if (midi !== null && midi !== undefined) {
+      events.push({
+        midi, t,
+        dur: span * articulation,
+        gain: typeof opts.gain === 'function' ? opts.gain(frac)
+              : (opts.gain !== undefined ? opts.gain : 0.9),
+        release,
+      });
+    }
+    t += span;
+  }
+  return { events, totalT: t };
+}
+
 /* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
-   Chromatic runs that cascade down and weave back up — kept inside the
-   keyboard's one-octave-plus-C range so each meow is at home pitch.    */
+   Unrelenting chromatic 16th notes that cascade down and weave back up.
+   No rests, no rhythm variety — that's the joke. */
 function genBumblebee() {
-  const seq = [];
-  const run = (a, b) => {            // inclusive chromatic run, either direction
+  const notes = [];
+  const run = (a, b) => {
     const s = a < b ? 1 : -1;
-    for (let m = a; m !== b + s; m += s) seq.push(m);
+    for (let m = a; m !== b + s; m += s) notes.push(m);
   };
   run(72, 60); run(60, 67); run(67, 60); run(60, 72);
   run(72, 61); run(61, 68); run(68, 60); run(60, 71);
   run(71, 60); run(60, 72);
 
-  const dt = 0.14;                   // brisk perpetual motion
-  const out = [];
-  let t = 0;
-  for (const m of seq) { out.push({ midi:m, t, dur:0.26, gain:0.78, release:0.18 }); t += dt; }
-  out.push({ midi:72, t: t + 0.05, dur:0.6, gain:1.0, release:0.45 });    // the bee lands
-  return out;
+  // every note is a sixteenth
+  const score = notes.map(m => [m, 0.25]);
+  const { events, totalT } = scoreToEvents(score, {
+    bpm: 108,                          // 108 BPM 16ths ≈ 7.2 notes/sec
+    gain: 0.78,
+    articulation: 0.85,
+    release: 0.16,
+  });
+  events.push({ midi: 72, t: totalT + 0.05, dur: 0.6, gain: 1.0, release: 0.45 });
+  return events;
 }
 
 /* In the Hall of the Mountain King — Grieg, Peer Gynt (1875, public domain).
-   Just the creeping 1 2 ♭3 4 5 ♭3 5 motif as an ostinato — accelerating
-   and growing louder, the way Grieg wrote it (and the way Backstreet's
-   Back famously lifts it).                                              */
+   Six eighths and a held QUARTER — that long fifth at the end is the
+   rhythmic breath that makes the theme creep. (And yes, it's the riff
+   Backstreet's Back samples.) Repeats six times with accelerando + crescendo. */
 function genMountainKing() {
-  const MOTIF = [0, 2, 3, 5, 7, 3, 7];      // 1 2 ♭3 4 5 ♭3 5 — the famous shape
-  const BASE = 62;                          // D minor, sits centred in the keyboard
+  // 1 2 ♭3 4 5 ♭3 5  — written in D minor; the 7th note is twice as long.
+  const motif = [
+    [62, 0.5],  // D  eighth
+    [64, 0.5],  // E  eighth
+    [65, 0.5],  // F  eighth
+    [67, 0.5],  // G  eighth
+    [69, 0.5],  // A  eighth   ← peak of the climb
+    [65, 0.5],  // F  eighth
+    [69, 1.0],  // A  QUARTER  ← held twice as long — the breath
+  ];
   const REPEATS = 6;
-  const total = MOTIF.length * REPEATS;
-  const out = [];
-  let t = 0, i = 0;
-  for (let r = 0; r < REPEATS; r++) {
-    for (const deg of MOTIF) {
-      const frac = i / (total - 1);
-      const step = 0.46 - frac * 0.30;       // accelerando: 0.46s → 0.16s
-      const gain = 0.42 + frac * 0.62;       // crescendo from quiet to loud
-      out.push({ midi: BASE + deg, t, dur: Math.max(0.28, step * 1.05), gain, release: 0.22 });
-      t += step;
-      i++;
-    }
-  }
-  out.push({ midi: BASE, t: t + 0.04, dur: 1.0, gain: 1.1, release: 0.6 });    // land on the tonic
-  return out;
+  const score = [];
+  for (let r = 0; r < REPEATS; r++) for (const ev of motif) score.push(ev);
+
+  const { events, totalT } = scoreToEvents(score, {
+    bpm:          frac => 100 + frac * 140,   // accelerando 100 → 240 BPM
+    gain:         frac => 0.42 + frac * 0.58, // crescendo: quiet → loud
+    articulation: 0.78,                        // pizzicato — slight gap between notes
+    release:      0.18,
+  });
+  events.push({ midi: 62, t: totalT + 0.10, dur: 1.0, gain: 1.1, release: 0.6 });
+  return events;
 }
 
 const SONGS = {
