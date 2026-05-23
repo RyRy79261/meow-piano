@@ -404,8 +404,11 @@ const whites = document.getElementById('whites');
 const blacks = document.getElementById('blacks');
 const stage  = document.getElementById('stage');
 
-/* Keyboard range (inclusive MIDI). C4 = 60 — two octaves, C4 to C6. */
-const RANGE_LO = 60, RANGE_HI = 84;
+/* Keyboard range (inclusive MIDI). 49 keys, C2 → C6 — a 4-octave small
+   MIDI-controller size. Songs live in the upper half (C4 → C6) where the
+   two tonal samples sit; the lower octaves are for tap-play, where the
+   low-voice sweep gives a great "deep cat" character. */
+const RANGE_LO = 36, RANGE_HI = 84;
 
 let NOTE_DEFS  = [];
 let keyEls     = [];             // DOM element per NOTE_DEFS index
