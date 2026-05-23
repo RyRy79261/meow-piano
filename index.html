@@ -404,8 +404,8 @@ const whites = document.getElementById('whites');
 const blacks = document.getElementById('blacks');
 const stage  = document.getElementById('stage');
 
-/* Keyboard range (inclusive MIDI). C4 = 60 — one octave + high C. */
-const RANGE_LO = 60, RANGE_HI = 72;
+/* Keyboard range (inclusive MIDI). C4 = 60 — two octaves, C4 to C6. */
+const RANGE_LO = 60, RANGE_HI = 84;
 
 let NOTE_DEFS  = [];
 let keyEls     = [];             // DOM element per NOTE_DEFS index
@@ -566,10 +566,17 @@ async function initAudio() {
     }
   }));
 
-  // Seed the melodic-sample set with the one tonally-steady recording.
-  // (meow_low sweeps wildly, meow_high's fundamental is ambiguous, so
-  // they aren't safe for melody — they stay as tap-only voices.)
-  melodicSamples = [{ buf: buffers.mid, root: 407 }];
+  // Two-sample multisample for songs. YIN pitch detection confirms:
+  //   meow_mid  ≈ 410 Hz steady  (G#4)
+  //   meow_high ≈ 1175 Hz steady (D6)
+  // The engine picks whichever sample is closer to each note's target
+  // pitch, so the pitch-shift per note stays small and the meows keep
+  // their character. (meow_low sweeps 300→1200Hz so it's not tonal —
+  // it stays as a tap voice only.)
+  melodicSamples = [
+    { buf: buffers.mid,  root: 410  },
+    { buf: buffers.high, root: 1175 },
+  ];
 
   // Then load any user-added recordings as extra melodic samples.
   await Promise.all(EXTRA_SAMPLES.map(async (e) => {
@@ -790,56 +797,60 @@ function scoreToEvents(score, opts) {
 }
 
 /* Flight of the Bumblebee — Rimsky-Korsakov (1899/1900, public domain).
-   Unrelenting chromatic 16th notes that cascade down and weave back up.
-   No rests, no rhythm variety — that's the joke. */
+   The iconic two-octave chromatic descent, then waves up and down the
+   keyboard, ending on a climactic ascent. Unrelenting 16th notes. */
 function genBumblebee() {
   const notes = [];
   const run = (a, b) => {
     const s = a < b ? 1 : -1;
     for (let m = a; m !== b + s; m += s) notes.push(m);
   };
-  run(72, 60); run(60, 67); run(67, 60); run(60, 72);
-  run(72, 61); run(61, 68); run(68, 60); run(60, 71);
-  run(71, 60); run(60, 72);
+  run(84, 60);   // ICONIC chromatic descent across two octaves (C6 → C4)
+  run(60, 72);   // wave up
+  run(72, 60);   // wave down
+  run(60, 79);   // up to G5
+  run(79, 64);   // descend to E4
+  run(64, 84);   // climactic ascent to high C
 
-  // every note is a sixteenth
-  const score = notes.map(m => [m, 0.25]);
+  const score = notes.map(m => [m, 0.25]);    // straight 16ths
   const { events, totalT } = scoreToEvents(score, {
-    bpm: 108,                          // 108 BPM 16ths ≈ 7.2 notes/sec
+    bpm: 108,
     gain: 0.78,
     articulation: 0.85,
     release: 0.16,
   });
-  events.push({ midi: 72, t: totalT + 0.05, dur: 0.6, gain: 1.0, release: 0.45 });
+  events.push({ midi: 84, t: totalT + 0.05, dur: 0.7, gain: 1.0, release: 0.5 });
   return events;
 }
 
 /* In the Hall of the Mountain King — Grieg, Peer Gynt (1875, public domain).
-   Six eighths and a held QUARTER — that long fifth at the end is the
-   rhythmic breath that makes the theme creep. (And yes, it's the riff
-   Backstreet's Back samples.) Repeats six times with accelerando + crescendo. */
+   The 1 2 ♭3 4 5 ♭3 5 creeping motif (six eighths + a held quarter — the
+   rhythmic breath that gives it the menace, and the riff Backstreet's
+   Back samples). Grieg MODULATES the motif upward as it accelerates and
+   crescendos through the troll-hall build, so the keyboard climbs as
+   the cats get louder and faster. */
 function genMountainKing() {
-  // 1 2 ♭3 4 5 ♭3 5  — written in D minor; the 7th note is twice as long.
-  const motif = [
-    [62, 0.5],  // D  eighth
-    [64, 0.5],  // E  eighth
-    [65, 0.5],  // F  eighth
-    [67, 0.5],  // G  eighth
-    [69, 0.5],  // A  eighth   ← peak of the climb
-    [65, 0.5],  // F  eighth
-    [69, 1.0],  // A  QUARTER  ← held twice as long — the breath
-  ];
-  const REPEATS = 6;
+  // motif as semitone degrees: 1 2 ♭3 4 5 ♭3 5 (quarter)
+  const MOTIF_DEGS = [0, 2, 3, 5, 7, 3, 7];
+  const MOTIF_BEATS = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1.0];
+  // each iteration's tonic — climbs C → Eb → G → C (an octave higher)
+  const BASES = [60, 60, 63, 63, 67, 67, 72];
+
   const score = [];
-  for (let r = 0; r < REPEATS; r++) for (const ev of motif) score.push(ev);
+  for (const base of BASES) {
+    for (let k = 0; k < MOTIF_DEGS.length; k++) {
+      score.push([base + MOTIF_DEGS[k], MOTIF_BEATS[k]]);
+    }
+  }
 
   const { events, totalT } = scoreToEvents(score, {
-    bpm:          frac => 100 + frac * 140,   // accelerando 100 → 240 BPM
-    gain:         frac => 0.42 + frac * 0.58, // crescendo: quiet → loud
+    bpm:          frac => 92 + frac * 180,    // accelerando 92 → 272 BPM
+    gain:         frac => 0.38 + frac * 0.70, // crescendo: hush → roar
     articulation: 0.78,                        // pizzicato — slight gap between notes
     release:      0.18,
   });
-  events.push({ midi: 62, t: totalT + 0.10, dur: 1.0, gain: 1.1, release: 0.6 });
+  // Final low tonic, held — the troll hall settles.
+  events.push({ midi: 60, t: totalT + 0.08, dur: 1.4, gain: 1.1, release: 0.7 });
   return events;
 }
 
